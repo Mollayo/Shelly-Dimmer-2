@@ -58,8 +58,8 @@ void loop()
     else if (telnetCmd[0] == 'b')
     {
       // '0' to '9' to set the brightness from 0% to 90%
-      uint8_t v = (telnetCmd[1] - '0') * 100 + (telnetCmd[2] - '0') * 10 + (telnetCmd[3] - '0');
-      if (v>=0 && v<=100)
+      uint16_t v = (telnetCmd[1] - '0') * 1000 + (telnetCmd[2] - '0') * 100 + (telnetCmd[3] - '0') * 10 + (telnetCmd[4] - '0');
+      if (v>=0 && v<=1000)
         dimmer::sendCmdBrightness(v);
       else
         logging::getLogStream().printf("wrong value for the brightness: %d\n",v);
@@ -67,9 +67,9 @@ void loop()
     else if (telnetCmd[0] == 'v')
       dimmer::sendCmdVersion();
     else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'n')
-      switches::switchOn();
+      dimmer::switchOn();
     else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'f' && telnetCmd[2] == 'f')
-      switches::switchOff();
+      dimmer::switchOff();
     else
       // Command not recognized, we print the menu options
       logging::printTelnetMenu();

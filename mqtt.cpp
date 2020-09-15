@@ -2,6 +2,7 @@
 #include "wifi.h"
 #include "logging.h"
 #include "switches.h"
+#include "dimmer.h"
 #include <PubSubClient.h>
 #include "mqtt.h"
 
@@ -30,13 +31,13 @@ namespace mqtt
     if (paramID!=NULL)
     {
       if (strcmp(paramID,"subMqttLightOn") == 0)
-        switches::switchOn();
+        dimmer::switchOn();
       else if (strcmp(paramID,"subMqttLightAllOn") == 0)
-        switches::switchOn();
+        dimmer::switchOn();
       else if (strcmp(paramID,"subMqttLightOff") == 0)
-        switches::switchOff();
+        dimmer::switchOff();
       else if (strcmp(paramID,"subMqttLightAllOff") == 0)
-        switches::switchOff();
+        dimmer::switchOff();
     }
   }
   
@@ -99,15 +100,15 @@ namespace mqtt
     return client.connected();
   }
 
-  void publishMQTTChangeBrightness(uint8 brightnessLevel)
+  void publishMQTTChangeBrightness(uint16_t brightnessLevel)
   {
     const char* topic=wifi::getParamValueFromID("pubMqttBrighnessLevel");
     // If no topic, we do not publish
     if (topic==NULL)
       return;
-    if (brightnessLevel>=0 && brightnessLevel<=100)
+    if (brightnessLevel>=0 && brightnessLevel<=1000)
     {
-      char payload[4];
+      char payload[5];
       sprintf(payload,"%d",brightnessLevel);
       client.publish(topic, payload);
       logging::getLogStream().printf("mqtt: publishing with topic \"%s\" and payload \"%s\"\n",topic, payload);

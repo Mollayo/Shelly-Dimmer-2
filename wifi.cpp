@@ -26,14 +26,18 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("</form><form action=\"/update\"><input type=\"submit\" value=\"Update firmware\"></form><form action=\"/paramsave\">"),
   // The switch parameters
   WiFiManagerParameter("<br/><br/><hr><h3>Switch parameters</h3>"),
-  WiFiManagerParameter("minBrighness", "Minimum brightness (0% to 20%)", "0", 3),
-  WiFiManagerParameter("maxBrighness", "Maximum brightness (0% to 100%)", "50", 3),
-  WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "1", 1),
+  WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "2", 1),
   WiFiManagerParameter("defaultReleaseState", "Default release state (0: open, 1: close)", "0", 1),
+
+  // The dimmer parameters
+  WiFiManagerParameter("<br/><br/><hr><h3>Dimmer parameters</h3>"),
+  WiFiManagerParameter("minBrighness", "Minimum brightness (0‰ to 200‰)", "0", 4),
+  WiFiManagerParameter("maxBrighness", "Maximum brightness (0‰ to 1000‰)", "500", 4),
+  WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge, 1: leading edge)", "2", 1),
 
   // The MQTT server parameters
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT server</h3>"),
-  WiFiManagerParameter("mqttServer", "IP of the broker", "0.0.0.0", 40),
+  WiFiManagerParameter("mqttServer", "IP of the broker", "", 40),
   WiFiManagerParameter("mqttPort", "Port", "1883", 6),
 
   // The MQTT publish
@@ -137,6 +141,9 @@ void updateSystemWithWifiManagerParams()
 
   // Update the configuration settings for the switches
   switches::configure();
+
+    // Update the configuration settings for the dimmer
+  dimmer::configure();
 }
 
 // callback to save the custom params

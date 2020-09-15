@@ -11,11 +11,6 @@ using namespace ace_button;
 
 namespace switches {
   
-  // The light parameters
-  uint8 minBrightness=5;     // brightness values in %
-  uint8 maxBrightness=50;
-  uint8 brightness=0;
-  uint8 wattage=0;
 
   float temperature;        // Internal temperature
 
@@ -24,10 +19,6 @@ namespace switches {
   uint8 defaultSwitchReleaseState=LOW;
 
   // Getter
-  uint8 &getMinBrightness(){return minBrightness;}
-  uint8 &getMaxBrightness(){return maxBrightness;}
-  uint8 &getBrightness(){return brightness;}
-  uint8 &getWattage(){return wattage;}
   float &getTemperature(){return temperature;}
   uint8 &getSwitchType(){return switchType;}
   uint8 &getDefaultSwitchReleaseState(){return defaultSwitchReleaseState;}
@@ -43,31 +34,12 @@ namespace switches {
 
   void handleSWEvent(AceButton*, uint8_t, uint8_t);
   void handleBuiltinSWEvent(AceButton*, uint8_t, uint8_t);
-  
-  void switchOn()
-  {
-    dimmer::sendCmdBrightness(getMaxBrightness());
-  }
 
-  void switchOff()
-  {
-    dimmer::sendCmdBrightness(getMinBrightness());
-  }
-  
   void overheating()
   {
     logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
     dimmer::sendCmdBrightness(0);
     mqtt::publishMQTTOverheating(temperature);
-  }
-
-  void switchToggle()
-  {
-    // Current brighness closer to minBrighness than maxBrighness
-    if ((getBrightness()-getMinBrightness()) < (getMaxBrightness()-getBrightness()))
-      switchOn();
-    else
-      switchOff();
   }
 
   double TaylorLog(double x)
@@ -123,8 +95,6 @@ namespace switches {
   void configure()
   {
     logging::getLogStream().println("switches: configure");
-    setMinBrightness(wifi::getParamValueFromID("minBrighness"));
-    setMaxBrightness(wifi::getParamValueFromID("maxBrighness"));
     setSwitchType(wifi::getParamValueFromID("switchType"));
     setDefaultSwitchReleaseState(wifi::getParamValueFromID("defaultReleaseState"));
     
@@ -210,7 +180,7 @@ namespace switches {
         if (getSwitchType()==TOGGLE_BUTTON)
         {
           logging::getLogStream().printf("button: SW%d pressed\n", sw->getId());
-          switchOn();
+          dimmer::switchOn();
           mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
         }
         break;
@@ -218,7 +188,7 @@ namespace switches {
         if (getSwitchType()==TOGGLE_BUTTON)
         {
           logging::getLogStream().printf("button: SW%d released\n", sw->getId());
-          switchOff();
+          dimmer::switchOff();
           mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
         }
         break;
@@ -226,7 +196,7 @@ namespace switches {
         if (getSwitchType()==PUSH_BUTTON)
         {
           logging::getLogStream().printf("button: SW%d clicked\n", sw->getId());
-          switchToggle();
+          dimmer::switchToggle();
           mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
         }
         break;
@@ -235,7 +205,7 @@ namespace switches {
         {
           logging::getLogStream().printf("button: SW%d long pressed\n", sw->getId());
           // Toggle the brighness
-          switchToggle();
+          dimmer::switchToggle();
           mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
         }
         break;
@@ -262,33 +232,4 @@ namespace switches {
       defaultSwitchReleaseState=HIGH;
   }
 
-  void setMinBrightness(const char* str)
-  {
-    if (!helpers::isInteger(str,3))
-      return;
-
-    // Make the conversion
-    minBrightness = atoi (str);
-
-    // Check if minBrightness between 0 and 20
-    if (minBrightness<0)
-      minBrightness=0;
-    if (minBrightness>20)
-      minBrightness=20;
-  }
-
-  void setMaxBrightness(const char* str)
-  {
-    if (!helpers::isInteger(str,3))
-      return;
-
-    // Make the conversion
-    maxBrightness = atoi (str);
-
-    // Check if maxBrightness between minBrightness+10 and 100
-    if (maxBrightness<minBrightness+10)
-      maxBrightness=minBrightness+10;
-    if (maxBrightness>100)
-      maxBrightness=100;
-  }
 }

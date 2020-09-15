@@ -15,7 +15,7 @@ namespace mqtt
   void handle();
 
   // Methodes for publishing to MQTT
-  void publishMQTTChangeBrightness(uint8 brightnessLevel);
+  void publishMQTTChangeBrightness(uint16_t brightnessLevel);
   void publishMQTTChangeSwitch(uint8 swID, uint swState);
   void publishMQTTOverheating(int temperature);
 }
