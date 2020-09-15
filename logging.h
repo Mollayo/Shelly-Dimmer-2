@@ -36,6 +36,7 @@ namespace logging
 
   void configure();
   void setup();
+  void handle();
 }
 
 #endif

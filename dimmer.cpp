@@ -12,7 +12,7 @@
 namespace dimmer {
 const uint8_t CMD_SET_BRIGHTNESS = 0x03;
 const uint8_t CMD_GET_STATE = 0x10;
-const uint8_t CMD_VERSION = 0x01;
+const uint8_t CMD_GET_VERSION = 0x01;
 const uint8_t CMD_SET_DIMMING_TYPE_1 = 0x20;
 const uint8_t CMD_SET_DIMMING_TYPE_2 = 0x30;
 const uint8_t CMD_SET_DIMMING_TYPE_3 = 0x31;
@@ -32,8 +32,8 @@ char rx_payload[rx_max_payload_size];
 
 
 // The light parameters
-uint16_t minBrightness = 5;   // brightness values in %
-uint16_t maxBrightness = 50;
+uint16_t minBrightness = 50;   // brightness values in ‰
+uint16_t maxBrightness = 500;
 uint16_t brightness = 0;
 uint8 wattage = 0;
 
@@ -64,7 +64,7 @@ void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_s
 {
   logging::getLogStream().println("dimmer: received packet");
   // Command for getting the version of the STM firmware
-  if (payload_cmd == CMD_VERSION)
+  if (payload_cmd == CMD_GET_VERSION)
   {
     logging::getLogStream().printf("- STM Firmware version: 0x%02X,0x%02X\n", payload[0], payload[1]);
     if (payload[0] !=0x35 || payload[1]!=0x02)
@@ -78,7 +78,7 @@ void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_s
     // Bightness level: payload[3] payload[2]
     brightness = ((payload[3] << 8) + payload[2]) / 1;
     wattage = ((payload[7] << 8) + payload[6]) / 20;
-    logging::getLogStream().printf("- brighness level: %d\n", brightness);
+    logging::getLogStream().printf("- brighness level: %d‰\n", brightness);
     logging::getLogStream().printf("- wattage level: %d\n", wattage);
 
     // To be done: other state values
@@ -214,7 +214,7 @@ void sendCommand(uint8_t cmd, uint8_t *payload, uint8_t len) {
 }
 
 void sendCmdVersion() {
-  sendCommand(CMD_VERSION, 0, 0);
+  sendCommand(CMD_GET_VERSION, 0, 0);
 }
 
 void sendCmdBrightness(uint16_t b) {
@@ -226,9 +226,12 @@ void sendCmdBrightness(uint16_t b) {
   }
 
   logging::getLogStream().printf("dimmer: set brightness to %d‰\n", b);
+
+  // see https://github.com/wichers/shelly_dimmer/blob/master/shelly_dimmer.cpp#L210
   uint8_t payload[] = {
-    (uint8_t)(b * 1), (uint8_t)((b * 1) >> 8), // b*10 second byte, b*10 first byte (little endian)
-    (uint8_t)(b * 8 / 10), (uint8_t)((b * 8 / 10) >> 8), 0x00, 0x00
+    (uint8_t)(b * 1), (uint8_t)((b * 1) >> 8),             // b*10 second byte, b*10 first byte (little endian)
+    (uint8_t)(b * 8 / 10), (uint8_t)((b * 8 / 10) >> 8),
+    0x00, 0x00                                            // fade_rate
   };
   sendCommand(CMD_SET_BRIGHTNESS, payload, sizeof(payload));
 }

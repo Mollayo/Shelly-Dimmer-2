@@ -15,7 +15,8 @@ namespace switches {
   float &getTemperature();
   uint8 &getSwitchType();
   uint8 &getDefaultSwitchReleaseState();
-
+  bool &getTemperatureLogging();
+  
   void setSwitchType(const char* str);
   void setDefaultSwitchReleaseState(const char* str);
   

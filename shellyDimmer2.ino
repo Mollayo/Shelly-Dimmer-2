@@ -15,7 +15,7 @@ void setup()
 {
   // For the built-in LED
   pinMode(SHELLY_BUILTIN_LED, OUTPUT);
-  digitalWrite(SHELLY_BUILTIN_LED, HIGH);  // LED off
+  digitalWrite(SHELLY_BUILTIN_LED, HIGH);
 
   // Setup serial
   Serial.begin(115200);
@@ -49,32 +49,8 @@ void loop()
   
   // Process the telnet commands
   // Interactive console for debugging and analysing the serial communation with the STM MCU
-  char* telnetCmd=logging::handleTelnet();
-  if (telnetCmd!=NULL)
-  {
-    // 's' to send the "get state" command
-    if (telnetCmd[0] == 's')
-      dimmer::sendCmdGetState();
-    else if (telnetCmd[0] == 'b')
-    {
-      // '0' to '9' to set the brightness from 0% to 90%
-      uint16_t v = (telnetCmd[1] - '0') * 1000 + (telnetCmd[2] - '0') * 100 + (telnetCmd[3] - '0') * 10 + (telnetCmd[4] - '0');
-      if (v>=0 && v<=1000)
-        dimmer::sendCmdBrightness(v);
-      else
-        logging::getLogStream().printf("wrong value for the brightness: %d\n",v);
-    }
-    else if (telnetCmd[0] == 'v')
-      dimmer::sendCmdVersion();
-    else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'n')
-      dimmer::switchOn();
-    else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'f' && telnetCmd[2] == 'f')
-      dimmer::switchOff();
-    else
-      // Command not recognized, we print the menu options
-      logging::printTelnetMenu();
-  }
-
+  logging::handle();
+  
   // Process data for MQTT
   mqtt::handle();
   

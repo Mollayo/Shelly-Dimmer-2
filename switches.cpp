@@ -1,4 +1,5 @@
 #include <AceButton.h>
+#include <Ticker.h>
 #include "wifi.h"
 #include "logging.h"
 #include "dimmer.h"
@@ -17,11 +18,15 @@ namespace switches {
   // The switch parameters
   uint8 switchType=TOGGLE_BUTTON;
   uint8 defaultSwitchReleaseState=LOW;
+  bool temperatureLogging=true;
+
+  Ticker blinker;
 
   // Getter
   float &getTemperature(){return temperature;}
   uint8 &getSwitchType(){return switchType;}
   uint8 &getDefaultSwitchReleaseState(){return defaultSwitchReleaseState;}
+  bool &getTemperatureLogging(){return temperatureLogging;}
   
   // For the temperature
   unsigned long prevTime = millis();
@@ -33,7 +38,7 @@ namespace switches {
   AceButton sw2(SHELLY_SW2,LOW,2);
 
   void handleSWEvent(AceButton*, uint8_t, uint8_t);
-  void handleBuiltinSWEvent(AceButton*, uint8_t, uint8_t);
+
 
   void overheating()
   {
@@ -160,7 +165,8 @@ namespace switches {
     {
         prevTime = millis();
         switches::getTemperature() = readTemperature();
-        logging::getLogStream().printf("temperature: %f\n", switches::getTemperature());
+        if (temperatureLogging)
+          logging::getLogStream().printf("temperature: %f\n", switches::getTemperature());
         // If temperature is above 95°C, the light is switched off
         if (switches::getTemperature()>95.0)
           overheating();
