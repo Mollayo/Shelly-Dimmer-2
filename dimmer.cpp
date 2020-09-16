@@ -10,12 +10,14 @@
 
 
 namespace dimmer {
-const uint8_t CMD_SET_BRIGHTNESS = 0x03;
+const uint8_t CMD_SET_BRIGHTNESS =0x02;
+const uint8_t CMD_SET_BRIGHTNESS_ADVANCED = 0x03;
 const uint8_t CMD_GET_STATE = 0x10;
 const uint8_t CMD_GET_VERSION = 0x01;
 const uint8_t CMD_SET_DIMMING_PARAMETERS = 0x20;
 const uint8_t CMD_SET_DIMMING_TYPE_2 = 0x30;
 const uint8_t CMD_SET_DIMMING_TYPE_3 = 0x31;
+const uint8_t CMD_SET_WARM_UP_TIME = 0x21;
 
 #define LEADING_EDGE 0x01
 #define TRAILING_EDGE 0x02
@@ -69,7 +71,7 @@ void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_s
   // Command for getting the version of the STM firmware
   if (payload_cmd == CMD_GET_VERSION)
   {
-    logging::getLogStream().printf("- STM Firmware version: 0x%02X,0x%02X\n", payload[0], payload[1]);
+    logging::getLogStream().printf("- STM Firmware version: %s\n", helpers::hexToStr(payload, payload_size));
     if (payload[0] !=0x35 || payload[1]!=0x02)
       logging::getLogStream().printf("- STM Firmware should be: 0x%02X,0x%02X\n", 0x35, 0x02);
     
@@ -107,6 +109,8 @@ void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_s
   }
   else if (payload_cmd == CMD_SET_BRIGHTNESS)
     logging::getLogStream().printf("- acknowledgement frame for changing brightness: %s\n", helpers::hexToStr(payload, payload_size));
+  else if (payload_cmd == CMD_SET_BRIGHTNESS_ADVANCED)
+    logging::getLogStream().printf("- acknowledgement frame for changing brightness advanced: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_PARAMETERS)
     logging::getLogStream().printf("- acknowledgement frame for changing dimming 1: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_TYPE_2)
@@ -230,12 +234,15 @@ void sendCmdSetBrightness(uint16_t b) {
 
   logging::getLogStream().printf("dimmer: set brightness to %d‰\n", b);
 
+  /*
   // see https://github.com/wichers/shelly_dimmer/blob/master/shelly_dimmer.cpp#L210
   uint8_t payload[] = {
     (uint8_t)(b * 1), (uint8_t)((b * 1) >> 8),             // b*10 second byte, b*10 first byte (little endian)
-    (uint8_t)(b * 8 / 10), (uint8_t)((b * 8 / 10) >> 8),
+    0x00, 0x00,
     0x00, 0x00                                            // fade_rate
   };
+  sendCommand(CMD_SET_BRIGHTNESS_ADVANCED, payload, sizeof(payload));*/
+  uint8_t payload[] = { (uint8_t)(b * 1), (uint8_t)((b * 1) >> 8)};             // b*10 second byte, b*10 first byte (little endian)
   sendCommand(CMD_SET_BRIGHTNESS, payload, sizeof(payload));
 }
 
@@ -321,9 +328,9 @@ void setMaxBrightness(const char* str)
   // Make the conversion
   maxBrightness = atoi (str);
 
-  // Check if maxBrightness between minBrightness+100 and 1000
-  if (maxBrightness < minBrightness + 100)
-    maxBrightness = minBrightness + 100;
+  // Check if maxBrightness between minBrightness and 1000
+  if (maxBrightness < minBrightness)
+    maxBrightness = minBrightness;
   if (maxBrightness > 1000)
     maxBrightness = 1000;
 }
