@@ -13,9 +13,12 @@ namespace dimmer {
 const uint8_t CMD_SET_BRIGHTNESS = 0x03;
 const uint8_t CMD_GET_STATE = 0x10;
 const uint8_t CMD_GET_VERSION = 0x01;
-const uint8_t CMD_SET_DIMMING_TYPE_1 = 0x20;
+const uint8_t CMD_SET_DIMMING_PARAMETERS = 0x20;
 const uint8_t CMD_SET_DIMMING_TYPE_2 = 0x30;
 const uint8_t CMD_SET_DIMMING_TYPE_3 = 0x31;
+
+#define LEADING_EDGE 0x01
+#define TRAILING_EDGE 0x02
 
 uint8_t _packet_counter = 0;
 uint8_t _packet_start_marker = 0x01;
@@ -104,7 +107,7 @@ void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_s
   }
   else if (payload_cmd == CMD_SET_BRIGHTNESS)
     logging::getLogStream().printf("- acknowledgement frame for changing brightness: %s\n", helpers::hexToStr(payload, payload_size));
-  else if (payload_cmd == CMD_SET_DIMMING_TYPE_1)
+  else if (payload_cmd == CMD_SET_DIMMING_PARAMETERS)
     logging::getLogStream().printf("- acknowledgement frame for changing dimming 1: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_TYPE_2)
     logging::getLogStream().printf("- acknowledgement frame for changing dimming 2: %s\n", helpers::hexToStr(payload, payload_size));
@@ -213,11 +216,11 @@ void sendCommand(uint8_t cmd, uint8_t *payload, uint8_t len) {
   receivePacket();
 }
 
-void sendCmdVersion() {
+void sendCmdGetVersion() {
   sendCommand(CMD_GET_VERSION, 0, 0);
 }
 
-void sendCmdBrightness(uint16_t b) {
+void sendCmdSetBrightness(uint16_t b) {
   // Publish the messange to MQTT
   if (brightness != b)
   {
@@ -241,47 +244,58 @@ void sendCmdGetState() {
   sendCommand(CMD_GET_STATE, NULL, 0);
 }
 
-void sendCmdSetTrailingEdge()
+void sendCmdSetDimmingParameters(uint8_t dimmingType,uint8_t debounce)
 {
-  logging::getLogStream().printf("dimmer: set trailing edge\n");
-  // This requires sending 3 frames
-  uint8_t payload1[] = {0x00, 0x00, 0x02, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00};
-  sendCommand(CMD_SET_DIMMING_TYPE_1, payload1, sizeof(payload1));
+  logging::getLogStream().printf("dimmer: change dimming type to %d and debounce value to %d\n", dimmingType, debounce);
+  // Examples of frame
+                      //0x00, 0x00, 0x02, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00};    // trailing edge
+                      //0x00, 0x00, 0x01, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00      // leading edge
+                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 150, leading edge
+                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 50, leading edge
+                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 100, leading edge
+                      //0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x1
+                      //0x00, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x2
+                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x3
+                      //0x00, 0x00, 0x01, 0x00, 0x14, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x4
+                      //          dim mode    fade rate    debounce
+  uint8_t payload[] = {0x00, 0x00, 0x02, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00};
+  // Set the trailing/leading edge
+  payload[2]=dimmingType;
+  // Set the anti-flickering debounce parameter
+  payload[6]=debounce;
+  // Send the frame to change the dimming parameters
+  sendCommand(CMD_SET_DIMMING_PARAMETERS, payload, sizeof(payload));
 
+  // I do not knwo the use of this but this is needed for changing the dimming type trailinh/heading edge
   uint8_t payload2[0xC8] = {0x00};
   sendCommand(CMD_SET_DIMMING_TYPE_2, payload2, sizeof(payload2));
 
   sendCommand(CMD_SET_DIMMING_TYPE_3, payload2, sizeof(payload2));
 }
 
-void sendCmdSetLeadingEdge()
+
+void setDimmingParameters(const char* dimmingTypeStr, const char* debounceStr)
 {
-  logging::getLogStream().printf("dimmer: set leading edge\n");
-  // This requires sending 3 frames
-  uint8_t payload1[] = {0x00, 0x00, 0x01, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00};
-  sendCommand(CMD_SET_DIMMING_TYPE_1, payload1, sizeof(payload1));
-
-  uint8_t payload2[0xC8] = {0x00};
-  sendCommand(CMD_SET_DIMMING_TYPE_2, payload2, sizeof(payload2));
-
-  sendCommand(CMD_SET_DIMMING_TYPE_3, payload2, sizeof(payload2));
-}
-
-void setDimmingType(const char* str)
-{
-  if (!helpers::isInteger(str, 1))
-    return;
-  if (str[0] == '1')
+  uint8_t dimmingType=TRAILING_EDGE, debounce=100;
+  if (helpers::isInteger(dimmingTypeStr, 1))
   {
-    // leading edge
-    dimmer::sendCmdSetLeadingEdge();
+    if (dimmingTypeStr[0] == '1')
+      // leading edge
+      dimmingType=LEADING_EDGE;
+    else
+      dimmingType=TRAILING_EDGE;
   }
-  else
+  if (helpers::isInteger(debounceStr, 3))
   {
-    // Trailing edge (default option)
-    dimmer::sendCmdSetTrailingEdge();
+    debounce=atoi(debounceStr);
+     // debounce value should be between 50 and 150
+    if (debounce<50)
+      debounce=50;
+    if (debounce>150)
+      debounce=150;
   }
 
+  dimmer::sendCmdSetDimmingParameters(dimmingType,debounce);
 }
 
 void setMinBrightness(const char* str)
@@ -319,12 +333,12 @@ void switchOn()
   // LED: maximum 200
   // At the booting stage, the light should be switched on/off at 100
   dimmer::receivePacket();
-  dimmer::sendCmdBrightness(getMaxBrightness());
+  dimmer::sendCmdSetBrightness(getMaxBrightness());
 }
 
 void switchOff()
 {
-  dimmer::sendCmdBrightness(getMinBrightness());
+  dimmer::sendCmdSetBrightness(getMinBrightness());
 }
 
 void switchToggle()
@@ -347,14 +361,16 @@ void setup() {
   delay(50);
   digitalWrite(STM_NRST_PIN, HIGH); // end stm reset
   delay(50);
-  sendCmdVersion();
+  sendCmdGetVersion();
 }
 
 void configure()
 {
+  logging::getLogStream().printf("dimmer: configure\n");
   setMinBrightness(wifi::getParamValueFromID("minBrighness"));
   setMaxBrightness(wifi::getParamValueFromID("maxBrighness"));
-  setDimmingType(wifi::getParamValueFromID("dimmingType"));
+  
+  setDimmingParameters(wifi::getParamValueFromID("dimmingType"),wifi::getParamValueFromID("flickerDebounce"));
 }
 
 void handle() {

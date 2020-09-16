@@ -26,6 +26,7 @@ namespace switches {
   void setup();
   void handle();
   void handleSWEvent(AceButton* sw, uint8_t eventType, uint8_t buttonState);
+  void enableBuiltinLedBlinking(bool enable);
 }
 
 #endif

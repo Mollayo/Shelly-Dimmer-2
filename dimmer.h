@@ -20,7 +20,7 @@ namespace dimmer
 
   void setMinBrightness(const char* str);
   void setMaxBrightness(const char* str);
-  void setDimmingType(const char* str);
+  void setDimmingParameters(const char* dimmingTypeStr, const char* debounceStr);
 
   void switchOn();
   void switchOff();
@@ -31,11 +31,10 @@ namespace dimmer
   void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_size);
   void receivePacket();
   void sendCommand(uint8_t cmd, uint8_t *payload, uint8_t len);
-  void sendCmdVersion();
-  void sendCmdBrightness(uint16_t b);
+  void sendCmdGetVersion();
+  void sendCmdSetBrightness(uint16_t b);
   void sendCmdGetState();
-  void sendCmdSetTrailingEdge();
-  void sendCmdSetLeadingEdge();
+  void sendCmdSetDimmingParameters(uint8_t dimmingType,uint8_t debounce);
   void setup();
   void handle();
   void configure();

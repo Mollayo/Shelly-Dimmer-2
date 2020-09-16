@@ -6,12 +6,14 @@
 #include "config.h"
 #include "mqtt.h"
 #include "switches.h"
-
+#include "ESP8266TimerInterrupt.h"
 
 using namespace ace_button;
 
 namespace switches {
   
+  
+  ESP8266Timer ITimer;      // For the builtin Leb blinking
 
   float temperature;        // Internal temperature
 
@@ -19,8 +21,6 @@ namespace switches {
   uint8 switchType=TOGGLE_BUTTON;
   uint8 defaultSwitchReleaseState=LOW;
   bool temperatureLogging=true;
-
-  Ticker blinker;
 
   // Getter
   float &getTemperature(){return temperature;}
@@ -40,10 +40,30 @@ namespace switches {
   void handleSWEvent(AceButton*, uint8_t, uint8_t);
 
 
+  void ICACHE_RAM_ATTR builtinLedBlinking(void)
+  {
+    digitalWrite(SHELLY_BUILTIN_LED, !(digitalRead(SHELLY_BUILTIN_LED)));  //Invert Current State of LED  
+  }
+  
+  void enableBuiltinLedBlinking(bool enable)
+  {
+    pinMode(SHELLY_BUILTIN_LED, OUTPUT);
+    if (enable)
+    {
+      ITimer.attachInterruptInterval(1000 * 250, builtinLedBlinking);
+    }
+    else
+    {
+      ITimer.detachInterrupt();
+      digitalWrite(SHELLY_BUILTIN_LED, LOW);  // LED on
+    }
+  }
+
+
   void overheating()
   {
     logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
-    dimmer::sendCmdBrightness(0);
+    dimmer::sendCmdSetBrightness(0);
     mqtt::publishMQTTOverheating(temperature);
   }
 

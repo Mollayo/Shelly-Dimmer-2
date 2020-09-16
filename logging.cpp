@@ -20,8 +20,9 @@ char *telnetCmd = NULL;
 //////////////////////////////////////////////////////////////////////
 LogStream::LogStream()
 {
-  logOutput = LogStream::LogDisabled;
+  //logOutput = LogStream::LogDisabled;
   //logOutput = LogStream::LogToFile;
+  logOutput = LogStream::LogToSerial;
 }
 
 void LogStream::setLogOutput(const char *c)
@@ -190,12 +191,12 @@ void handle()
       // '0' to '9' to set the brightness from 0% to 90%
       uint16_t v = (telnetCmd[1] - '0') * 1000 + (telnetCmd[2] - '0') * 100 + (telnetCmd[3] - '0') * 10 + (telnetCmd[4] - '0');
       if (v >= 0 && v <= 1000)
-        dimmer::sendCmdBrightness(v);
+        dimmer::sendCmdSetBrightness(v);
       else
         logging::getLogStream().printf("wrong value for the brightness: %d\n", v);
     }
     else if (telnetCmd[0] == 'v' && telnetCmd[1] == 0x0D)
-      dimmer::sendCmdVersion();
+      dimmer::sendCmdGetVersion();
     else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'n' && telnetCmd[2] == 0x0D)
       dimmer::switchOn();
     else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'f' && telnetCmd[2] == 'f' && telnetCmd[3] == 0x0D)

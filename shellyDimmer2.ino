@@ -1,5 +1,5 @@
 /*
-  Firmware for Shelly Dimmer 2
+  Firmware for Shelly Dimmer 2: https://shelly.cloud/knowledge-base/devices/shelly-dimmer-2/
 */
 
 
@@ -10,12 +10,10 @@
 #include "switches.h"
 
 
-
 void setup()
 {
-  // For the built-in LED
-  pinMode(SHELLY_BUILTIN_LED, OUTPUT);
-  digitalWrite(SHELLY_BUILTIN_LED, HIGH);
+  // Start blinking the built-in LED to show that the device is alive
+  switches::enableBuiltinLedBlinking(true);
 
   // Setup serial
   Serial.begin(115200);
@@ -37,8 +35,8 @@ void setup()
   // Setup for the MCU
   dimmer::setup();
 
-  // Switch on the built-in LED to show that it is now running the main loop
-  digitalWrite(SHELLY_BUILTIN_LED, LOW);  // LED on
+  // Stop blinking to show that the device is ready
+  switches::enableBuiltinLedBlinking(false);
 }
 
 

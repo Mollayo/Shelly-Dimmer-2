@@ -34,6 +34,7 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("minBrighness", "Minimum brightness (0‰ to 200‰)", "0", 4),
   WiFiManagerParameter("maxBrighness", "Maximum brightness (0‰ to 1000‰)", "500", 4),
   WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge, 1: leading edge)", "2", 1),
+  WiFiManagerParameter("flickerDebounce", "Anti-flickering debounce (50 - 150)", "100", 3),
 
   // The MQTT server parameters
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT server</h3>"),
@@ -42,20 +43,20 @@ WiFiManagerParameter customParamInit[] = {
 
   // The MQTT publish
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT publish</h3>"),
-  WiFiManagerParameter("pubMqttBrighnessLevel", "Brightness change", "brighness", 20),
-  WiFiManagerParameter("pubMqttSwitchEvents", "Switch events", "switchEvent", 20),
-  WiFiManagerParameter("pubMqttOverheat", "Overheat alarm", "overheat", 20),
+  WiFiManagerParameter("pubMqttBrighnessLevel", "Brightness change", "brighness", 100),
+  WiFiManagerParameter("pubMqttSwitchEvents", "Switch events", "switchEvent", 100),
+  WiFiManagerParameter("pubMqttOverheat", "Overheat alarm", "overheat", 100),
 
   // The MQTT subscribe
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT subscribe</h3>"),
-  WiFiManagerParameter("subMqttLightOn", "Topic for switching on", "switchOn", 20),
-  WiFiManagerParameter("subMqttLightAllOn", "Topic for switching on all lights", "switchOnAll", 20),
-  WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff", 20),
-  WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 20),
-  WiFiManagerParameter("subMqttStartBlink", "Topic for starting blink", "startBlink", 20),
-  WiFiManagerParameter("subMqttStopLight", "Topic for stopping blink", "stopBlink", 20),
-  WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blink", "startFastBlink", 20),
-  WiFiManagerParameter("subMqttStopFastBlink", "Topic for stopping fast blink", "stopFastBlink", 20),
+  WiFiManagerParameter("subMqttLightOn", "Topic for switching on", "switchOn", 100),
+  WiFiManagerParameter("subMqttLightAllOn", "Topic for switching on all lights", "switchOnAll", 100),
+  WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff", 100),
+  WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 100),
+  WiFiManagerParameter("subMqttStartBlink", "Topic for starting blink", "startBlink", 100),
+  WiFiManagerParameter("subMqttStopLight", "Topic for stopping blink", "stopBlink", 100),
+  WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blink", "startFastBlink", 100),
+  WiFiManagerParameter("subMqttStopFastBlink", "Topic for stopping fast blink", "stopFastBlink", 100),
 
   // The debugging options
   WiFiManagerParameter("<br/><br/><hr><h3>Debugging options</h3>"),
@@ -133,7 +134,7 @@ int getIndexFromID(const char* str)
 // Update the system with the new params
 void updateSystemWithWifiManagerParams()
 {
-  // Update the configuration settings  for logging -> should be done first
+  // Update the configuration settings for logging -> should be done first
   logging::configure();
 
   // Update the configuration settings for MQTT
