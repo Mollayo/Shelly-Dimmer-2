@@ -33,7 +33,7 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("<br/><br/><hr><h3>Dimmer parameters</h3>"),
   WiFiManagerParameter("minBrighness", "Minimum brightness (0‰ to 200‰)", "0", 4),
   WiFiManagerParameter("maxBrighness", "Maximum brightness (0‰ to 1000‰)", "500", 4),
-  WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge, 1: leading edge)", "2", 1),
+  WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge (LED), 1: leading edge (halogen))", "2", 1),
   WiFiManagerParameter("flickerDebounce", "Anti-flickering debounce (50 - 150)", "100", 3),
 
   // The MQTT server parameters
@@ -54,9 +54,8 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff", 100),
   WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 100),
   WiFiManagerParameter("subMqttStartBlink", "Topic for starting blink", "startBlink", 100),
-  WiFiManagerParameter("subMqttStopLight", "Topic for stopping blink", "stopBlink", 100),
   WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blink", "startFastBlink", 100),
-  WiFiManagerParameter("subMqttStopFastBlink", "Topic for stopping fast blink", "stopFastBlink", 100),
+  WiFiManagerParameter("subMqttStopBlink", "Topic for stopping blink", "stopBlink", 100),
 
   // The debugging options
   WiFiManagerParameter("<br/><br/><hr><h3>Debugging options</h3>"),

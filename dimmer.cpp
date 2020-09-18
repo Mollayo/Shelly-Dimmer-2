@@ -10,7 +10,7 @@
 
 
 namespace dimmer {
-const uint8_t CMD_SET_BRIGHTNESS =0x02;
+const uint8_t CMD_SET_BRIGHTNESS = 0x02;
 const uint8_t CMD_SET_BRIGHTNESS_ADVANCED = 0x03;
 const uint8_t CMD_GET_STATE = 0x10;
 const uint8_t CMD_GET_VERSION = 0x01;
@@ -27,13 +27,13 @@ uint8_t _packet_start_marker = 0x01;
 uint8_t _packet_end_marker = 0x04;
 
 const uint8_t buffer_size = 255;
-char tx_buffer[buffer_size];
-char rx_buffer[buffer_size];
+uint8_t tx_buffer[buffer_size];
+uint8_t rx_buffer[buffer_size];
 uint8_t rx_idx = 0;
 uint8_t rx_payload_size = 0;
 uint8_t rx_payload_cmd = 0;
 const uint8_t rx_max_payload_size = 255;
-char rx_payload[rx_max_payload_size];
+uint8_t rx_payload[rx_max_payload_size];
 
 
 // The light parameters
@@ -41,6 +41,18 @@ uint16_t minBrightness = 50;   // brightness values in ‰
 uint16_t maxBrightness = 500;
 uint16_t brightness = 0;
 uint8 wattage = 0;
+
+// For blinking
+long lastBlinkingTime = 0;
+uint16_t blinkingDuration = 0;   // in ms; if 0, no blinking
+bool blinkingLightState = false;
+
+uint16_t crc(char *buffer, uint8_t len);
+void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_size);
+void receivePacket();
+void sendCommand(uint8_t cmd, uint8_t *payload, uint8_t len);
+void sendCmdSetDimmingParameters(uint8_t dimmingType,uint8_t debounce);
+void sendCmdSetBrightness(uint16_t b);
 
 
 uint16_t &getMinBrightness() {
@@ -57,7 +69,7 @@ uint8 &getWattage() {
 }
 
 
-uint16_t crc(char *buffer, uint8_t len) {
+uint16_t crc(uint8_t *buffer, uint8_t len) {
   uint16_t c = 0;
   for (int i = 1; i < len; i++) {
     c += buffer[i];
@@ -65,16 +77,16 @@ uint16_t crc(char *buffer, uint8_t len) {
   return c;
 }
 
-void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_size)
+void processReceivedPacket(uint8_t payload_cmd, uint8_t* payload, uint8_t payload_size)
 {
   logging::getLogStream().println("dimmer: received packet");
   // Command for getting the version of the STM firmware
   if (payload_cmd == CMD_GET_VERSION)
   {
     logging::getLogStream().printf("- STM Firmware version: %s\n", helpers::hexToStr(payload, payload_size));
-    if (payload[0] !=0x35 || payload[1]!=0x02)
+    if (payload[0] != 0x35 || payload[1] != 0x02)
       logging::getLogStream().printf("- STM Firmware should be: 0x%02X,0x%02X\n", 0x35, 0x02);
-    
+
   }
   // Command for getting the state (brigthness level, wattage, etc)
   else if (payload_cmd == CMD_GET_STATE)
@@ -112,7 +124,7 @@ void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_s
   else if (payload_cmd == CMD_SET_BRIGHTNESS_ADVANCED)
     logging::getLogStream().printf("- acknowledgement frame for changing brightness advanced: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_PARAMETERS)
-    logging::getLogStream().printf("- acknowledgement frame for changing dimming 1: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("- acknowledgement frame for changing dimming parameters: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_TYPE_2)
     logging::getLogStream().printf("- acknowledgement frame for changing dimming 2: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_TYPE_3)
@@ -224,24 +236,18 @@ void sendCmdGetVersion() {
   sendCommand(CMD_GET_VERSION, 0, 0);
 }
 
-void sendCmdSetBrightness(uint16_t b) {
-  // Publish the messange to MQTT
-  if (brightness != b)
-  {
-    brightness = b;
-    mqtt::publishMQTTChangeBrightness(b);
-  }
-
+void sendCmdSetBrightness(uint16_t b) 
+{
   logging::getLogStream().printf("dimmer: set brightness to %d‰\n", b);
 
   /*
-  // see https://github.com/wichers/shelly_dimmer/blob/master/shelly_dimmer.cpp#L210
-  uint8_t payload[] = {
+    // see https://github.com/wichers/shelly_dimmer/blob/master/shelly_dimmer.cpp#L210
+    uint8_t payload[] = {
     (uint8_t)(b * 1), (uint8_t)((b * 1) >> 8),             // b*10 second byte, b*10 first byte (little endian)
     0x00, 0x00,
     0x00, 0x00                                            // fade_rate
-  };
-  sendCommand(CMD_SET_BRIGHTNESS_ADVANCED, payload, sizeof(payload));*/
+    };
+    sendCommand(CMD_SET_BRIGHTNESS_ADVANCED, payload, sizeof(payload));*/
   uint8_t payload[] = { (uint8_t)(b * 1), (uint8_t)((b * 1) >> 8)};             // b*10 second byte, b*10 first byte (little endian)
   sendCommand(CMD_SET_BRIGHTNESS, payload, sizeof(payload));
 }
@@ -251,25 +257,25 @@ void sendCmdGetState() {
   sendCommand(CMD_GET_STATE, NULL, 0);
 }
 
-void sendCmdSetDimmingParameters(uint8_t dimmingType,uint8_t debounce)
+void sendCmdSetDimmingParameters(uint8_t dimmingType, uint8_t debounce)
 {
   logging::getLogStream().printf("dimmer: change dimming type to %d and debounce value to %d\n", dimmingType, debounce);
   // Examples of frame
-                      //0x00, 0x00, 0x02, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00};    // trailing edge
-                      //0x00, 0x00, 0x01, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00      // leading edge
-                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 150, leading edge
-                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 50, leading edge
-                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 100, leading edge
-                      //0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x1
-                      //0x00, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x2
-                      //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x3
-                      //0x00, 0x00, 0x01, 0x00, 0x14, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x4
-                      //          dim mode    fade rate    debounce
+  //0x00, 0x00, 0x02, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00};    // trailing edge
+  //0x00, 0x00, 0x01, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00      // leading edge
+  //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 150, leading edge
+  //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 50, leading edge
+  //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // debounce 100, leading edge
+  //0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x1
+  //0x00, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x2
+  //0x00, 0x00, 0x01, 0x00, 0x0F, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x3
+  //0x00, 0x00, 0x01, 0x00, 0x14, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00      // fade x4
+  //          dim mode    fade rate    debounce
   uint8_t payload[] = {0x00, 0x00, 0x02, 0x00, 0x0f, 0x00, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00};
   // Set the trailing/leading edge
-  payload[2]=dimmingType;
+  payload[2] = dimmingType;
   // Set the anti-flickering debounce parameter
-  payload[6]=debounce;
+  payload[6] = debounce;
   // Send the frame to change the dimming parameters
   sendCommand(CMD_SET_DIMMING_PARAMETERS, payload, sizeof(payload));
 
@@ -283,26 +289,26 @@ void sendCmdSetDimmingParameters(uint8_t dimmingType,uint8_t debounce)
 
 void setDimmingParameters(const char* dimmingTypeStr, const char* debounceStr)
 {
-  uint8_t dimmingType=TRAILING_EDGE, debounce=100;
+  uint8_t dimmingType = TRAILING_EDGE, debounce = 100;
   if (helpers::isInteger(dimmingTypeStr, 1))
   {
     if (dimmingTypeStr[0] == '1')
       // leading edge
-      dimmingType=LEADING_EDGE;
+      dimmingType = LEADING_EDGE;
     else
-      dimmingType=TRAILING_EDGE;
+      dimmingType = TRAILING_EDGE;
   }
   if (helpers::isInteger(debounceStr, 3))
   {
-    debounce=atoi(debounceStr);
-     // debounce value should be between 50 and 150
-    if (debounce<50)
-      debounce=50;
-    if (debounce>150)
-      debounce=150;
+    debounce = atoi(debounceStr);
+    // debounce value should be between 50 and 150
+    if (debounce < 50)
+      debounce = 50;
+    if (debounce > 150)
+      debounce = 150;
   }
 
-  dimmer::sendCmdSetDimmingParameters(dimmingType,debounce);
+  dimmer::sendCmdSetDimmingParameters(dimmingType, debounce);
 }
 
 void setMinBrightness(const char* str)
@@ -335,17 +341,23 @@ void setMaxBrightness(const char* str)
     maxBrightness = 1000;
 }
 
+void setBrightness(uint16_t b)
+{
+  dimmer::sendCmdSetBrightness(b);
+  if (brightness != b)
+    // Publish the messange to MQTT
+    mqtt::publishMQTTChangeBrightness(b);
+  brightness = b;
+}
+
 void switchOn()
 {
-  // LED: maximum 200
-  // At the booting stage, the light should be switched on/off at 100
-  dimmer::receivePacket();
-  dimmer::sendCmdSetBrightness(getMaxBrightness());
+  setBrightness(getMaxBrightness());
 }
 
 void switchOff()
 {
-  dimmer::sendCmdSetBrightness(getMinBrightness());
+  setBrightness(getMinBrightness());
 }
 
 void switchToggle()
@@ -355,6 +367,25 @@ void switchToggle()
     switchOn();
   else
     switchOff();
+}
+
+void setBlinkingDuration(uint16_t duration)
+{
+  if (blinkingDuration!=duration)
+  {
+    blinkingDuration=duration;
+    if (duration == 0)
+    {
+      // stopping blinking
+      dimmer::sendCmdSetBrightness(brightness);   // Comme back to the initial brightness level
+    }
+    else
+    {
+      // start blinking
+      blinkingLightState=true;    // start with light on
+      lastBlinkingTime=0;         // reset blinking timer
+    }
+  }
 }
 
 void setup() {
@@ -376,12 +407,30 @@ void configure()
   logging::getLogStream().printf("dimmer: configure\n");
   setMinBrightness(wifi::getParamValueFromID("minBrighness"));
   setMaxBrightness(wifi::getParamValueFromID("maxBrighness"));
-  
-  setDimmingParameters(wifi::getParamValueFromID("dimmingType"),wifi::getParamValueFromID("flickerDebounce"));
+
+  setDimmingParameters(wifi::getParamValueFromID("dimmingType"), wifi::getParamValueFromID("flickerDebounce"));
 }
 
-void handle() {
+void handle()
+{
   receivePacket();
+
+  // For blinking
+  // blinkingDuration==0 -> no blinking
+  if (blinkingDuration>0)
+  {
+    long now = millis();
+    if (now - lastBlinkingTime > blinkingDuration)
+    {
+      lastBlinkingTime = now;
+      // alternate on/off
+      if (blinkingLightState)
+        dimmer::sendCmdSetBrightness(getMaxBrightness());
+      else
+        dimmer::sendCmdSetBrightness(0);
+      blinkingLightState=!blinkingLightState;
+    }
+  }
 }
 
 } // namespace dimmer

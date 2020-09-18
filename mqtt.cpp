@@ -38,6 +38,12 @@ namespace mqtt
         dimmer::switchOff();
       else if (strcmp(paramID,"subMqttLightAllOff") == 0)
         dimmer::switchOff();
+      else if (strcmp(paramID,"subMqttStartBlink") == 0)
+        dimmer::setBlinkingDuration(1000);
+      else if (strcmp(paramID,"subMqttStartFastBlink") == 0)
+        dimmer::setBlinkingDuration(500);
+      else if (strcmp(paramID,"subMqttStopBlink") == 0)
+        dimmer::setBlinkingDuration(0);
     }
   }
   
@@ -72,8 +78,8 @@ namespace mqtt
 
   boolean reconnect()
   {
-    char mac[6];
-    WiFi.macAddress((uint8*)mac);
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
     if (client.connect(helpers::hexToStr(mac, 6)))        // the client name is the MAC address
     {
       logging::getLogStream().printf("mqtt: connected to %s:%d with client name %s\n", mqttServer, mqttPort, helpers::hexToStr(mac, 6));

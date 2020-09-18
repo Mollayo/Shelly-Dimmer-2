@@ -63,7 +63,7 @@ namespace switches {
   void overheating()
   {
     logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
-    dimmer::sendCmdSetBrightness(0);
+    dimmer::setBrightness(0);
     mqtt::publishMQTTOverheating(temperature);
   }
 

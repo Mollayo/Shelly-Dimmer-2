@@ -22,19 +22,14 @@ namespace dimmer
   void setMaxBrightness(const char* str);
   void setDimmingParameters(const char* dimmingTypeStr, const char* debounceStr);
 
+  void setBrightness(uint16_t b);
   void switchOn();
   void switchOff();
   void switchToggle();
 
-  
-  uint16_t crc(char *buffer, uint8_t len);
-  void processReceivedPacket(uint8_t payload_cmd, char* payload, uint8_t payload_size);
-  void receivePacket();
-  void sendCommand(uint8_t cmd, uint8_t *payload, uint8_t len);
   void sendCmdGetVersion();
-  void sendCmdSetBrightness(uint16_t b);
   void sendCmdGetState();
-  void sendCmdSetDimmingParameters(uint8_t dimmingType,uint8_t debounce);
+  void setBlinkingDuration(uint16_t duration);    // in ms, duration==0 means no blinking
   void setup();
   void handle();
   void configure();

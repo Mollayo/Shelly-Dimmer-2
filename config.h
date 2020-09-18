@@ -21,7 +21,7 @@
 namespace helpers {
 
   bool isInteger(const char* str, uint maxLength=10);
-  const char* hexToStr(const char *s, uint8_t len);
+  const char* hexToStr(const uint8_t *s, uint8_t len);
 }
 
 #endif
