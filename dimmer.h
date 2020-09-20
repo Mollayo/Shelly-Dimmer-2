@@ -32,7 +32,7 @@ namespace dimmer
   void setBlinkingDuration(uint16_t duration);    // in ms, duration==0 means no blinking
   void setup();
   void handle();
-  void configure();
+  void updateParams();
 
 } // namespace dimmer
 

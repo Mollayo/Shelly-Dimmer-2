@@ -118,14 +118,8 @@ int getIndexFromID(const char* str)
   {
     if (customParams[i]->getID() == NULL)
       continue;
-    if (strncmp(customParams[i]->getID(), str, strlen(str)) == 0)
-    {
-      if (customParams[i]->getValue() == NULL)
-        return -1;
-      if (strlen(customParams[i]->getValue()) == 0)
-        return -1;
+    if (strcmp(customParams[i]->getID(), str) == 0)
       return i;
-    }
   }
   return -1;
 }
@@ -134,16 +128,16 @@ int getIndexFromID(const char* str)
 void updateSystemWithWifiManagerParams()
 {
   // Update the configuration settings for logging -> should be done first
-  logging::configure();
+  logging::updateParams();
 
   // Update the configuration settings for MQTT
-  mqtt::configure();
+  mqtt::updateParams();
 
   // Update the configuration settings for the switches
-  switches::configure();
+  switches::updateParams();
 
     // Update the configuration settings for the dimmer
-  dimmer::configure();
+  dimmer::updateParams();
 }
 
 // callback to save the custom params
@@ -152,7 +146,7 @@ void saveParams()
   logging::getLogStream().println("wifi: saving custom parameters");
 
   // Create the json object from the custom parameters
-  DynamicJsonDocument jsonBuffer(1024);
+  DynamicJsonDocument jsonBuffer(2048);
   WiFiManagerParameter** customParams = wifiManager.getParameters();
   for (int i = 0; i < wifiManager.getParametersCount(); i++)
   {
@@ -254,13 +248,19 @@ void loadParams()
     logging::getLogStream().println("wifi: failed to mounted file system");
 }
 
+void displayFile()
+{
+  logging::displayFile(wifiManager.server.get()->uri());
+}
+
 
 void bindServerCallback()
 {
   // This is to handle the web page for updating the firmware
   httpUpdater.setup(wifiManager.server.get(), "/update");
   // Handle for managing the log file on SPIFFS
-  wifiManager.server.get()->on("/log.txt", logging::displayLogFile);
+  wifiManager.server.get()->on("/log.txt", displayFile);
+  wifiManager.server.get()->on("/config.json", displayFile);
   wifiManager.server.get()->on("/erase_log_file", logging::eraseLogFile);
 }
 

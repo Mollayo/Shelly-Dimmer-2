@@ -31,10 +31,10 @@ namespace logging
   void disableTelnet();
   void printTelnetMenu();
 
-  void displayLogFile();
+  void displayFile(const String &fileName);
   void eraseLogFile();
 
-  void configure();
+  void updateParams();
   void setup();
   void handle();
 }

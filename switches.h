@@ -22,7 +22,7 @@ namespace switches {
   
   double TaylorLog(double x);
   float readTemperature();
-  void configure();
+  void updateParams();
   void setup();
   void handle();
   void handleSWEvent(AceButton* sw, uint8_t eventType, uint8_t buttonState);

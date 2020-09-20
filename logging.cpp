@@ -249,13 +249,13 @@ void disableTelnet()
 }
 
 
-void displayLogFile()
+void displayFile(const String &fileName)
 {
   if (SPIFFS.begin())
   {
-    if (SPIFFS.exists("/log.txt"))
+    if (SPIFFS.exists(fileName))
     {
-      File logFile = SPIFFS.open("/log.txt", "r");
+      File logFile = SPIFFS.open(fileName, "r");
       if (logFile)
       {
         size_t fileSize = logFile.size();
@@ -285,7 +285,7 @@ void displayLogFile()
     SPIFFS.end();
   }
   // In case of error log file
-  wifi::getWifiManager().server.get()->send(200, "text/plane", "No log file");
+  wifi::getWifiManager().server.get()->send(200, "text/plane", "No file");
 }
 
 void eraseLogFile()
@@ -309,7 +309,7 @@ void eraseLogFile()
   wifi::getWifiManager().server.get()->send(200, "application/x-binary", "");
 }
 
-void configure()
+void updateParams()
 {
   logStream.setLogOutput(wifi::getParamValueFromID("logOutput"));
   if (logStream.logOutput == LogStream::LogToTelnet)

@@ -402,9 +402,9 @@ void setup() {
   sendCmdGetVersion();
 }
 
-void configure()
+void updateParams()
 {
-  logging::getLogStream().printf("dimmer: configure\n");
+  logging::getLogStream().printf("dimmer: updateParams\n");
   setMinBrightness(wifi::getParamValueFromID("minBrighness"));
   setMaxBrightness(wifi::getParamValueFromID("maxBrighness"));
 

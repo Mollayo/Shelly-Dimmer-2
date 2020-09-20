@@ -9,7 +9,7 @@
 namespace mqtt
 { 
   void callback(char* topic, byte* payload, unsigned int length);
-  void configure();
+  void updateParams();
   void setup();
   boolean reconnect();
   void handle();

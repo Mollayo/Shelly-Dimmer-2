@@ -47,9 +47,9 @@ namespace mqtt
     }
   }
   
-  void configure()
+  void updateParams()
   {
-     logging::getLogStream().printf("mqtt: configure\n");
+     logging::getLogStream().printf("mqtt: updateParams\n");
     // Disconnect the client if it is connected
     if (client.connected())
     {

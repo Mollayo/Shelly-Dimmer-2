@@ -117,9 +117,9 @@ namespace switches {
     return temperature;
   }
 
-  void configure()
+  void updateParams()
   {
-    logging::getLogStream().println("switches: configure");
+    logging::getLogStream().println("switches::updateParams");
     setSwitchType(wifi::getParamValueFromID("switchType"));
     setDefaultSwitchReleaseState(wifi::getParamValueFromID("defaultReleaseState"));
     
@@ -169,8 +169,6 @@ namespace switches {
 
     // Same event handler for all switches
     buttonConfig->setEventHandler(handleSWEvent);
-
-    configure();
   }
   
   void handle()
