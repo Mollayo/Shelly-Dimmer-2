@@ -344,7 +344,7 @@ void setAutoOffTimer(const char* str)
   }
 
   // Make the conversion from ms to s
-  autoOffDuration = atoi (str) * 1000;
+  autoOffDuration = atoi (str);
 }
 
 void setBrightness(uint8_t b)
@@ -485,8 +485,10 @@ void handle()
   if (autoOffDuration>0 && lastLightOnTime>0)
   {
     currTime = millis();
-    if (currTime - lastLightOnTime > autoOffDuration)
+    // Make the conversion from ms to s
+    if (currTime - lastLightOnTime > autoOffDuration*1000)
     {
+      logging::getLogStream().printf("light: auto-off light\n");
       lightOff();
       lastLightOnTime = 0;
     }
