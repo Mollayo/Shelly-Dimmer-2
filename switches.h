@@ -1,32 +1,30 @@
 #ifndef SWITCHES
 #define SWITCHES
 
-#include <AceButton.h>
 #include "wifi.h"
-#include "dimmer.h"
+#include "light.h"
 #include "config.h"
 #include "mqtt.h"
 
-using namespace ace_button;
 
 namespace switches {
 
+  enum { LED_OFF, LED_FAST_BLINKING, LED_SLOW_BLINKING, LED_ON };
+
+  // For the built-in led blinking
+  void enableBuiltinLedBlinking(uint8_t ledMode);
+  
   // Getter
   float &getTemperature();
-  uint8 &getSwitchType();
-  uint8 &getDefaultSwitchReleaseState();
   bool &getTemperatureLogging();
   
   void setSwitchType(const char* str);
   void setDefaultSwitchReleaseState(const char* str);
   
-  double TaylorLog(double x);
   float readTemperature();
   void updateParams();
   void setup();
   void handle();
-  void handleSWEvent(AceButton* sw, uint8_t eventType, uint8_t buttonState);
-  void enableBuiltinLedBlinking(bool enable);
 }
 
 #endif

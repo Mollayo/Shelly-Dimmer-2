@@ -3,7 +3,7 @@
 #include <ESP8266WiFi.h>
 #include "config.h"
 #include "wifi.h"
-#include "dimmer.h"
+#include "light.h"
 #include "switches.h"
 
 namespace logging
@@ -170,9 +170,10 @@ void printTelnetMenu()
   if (Telnet)
   {
     Telnet.println("Commands:");
-    Telnet.println(" s : get the state of the MCU");
-    Telnet.println(" v : get the version of the MCU");
-    Telnet.println(" br0000 to br1000 : set the brighness between 0‰ and 1000‰");
+    Telnet.println(" res : reset the STM32 MCU");
+    Telnet.println(" s : get the state of the STM32 MCU");
+    Telnet.println(" v : get the version of the STM32 MCU");    
+    Telnet.println(" br000 to br100 : set the brighness between 0% and 100%");
     Telnet.println(" on or off : switch on/off the light");
     Telnet.println(" temp : enable/disable temperature logging");
     Telnet.println(" bl0000 to bl9999 : set blinking duration");
@@ -186,29 +187,31 @@ void handle()
   {
     // 's' to send the "get state" command
     if (telnetCmd[0] == 's' && telnetCmd[1] == 0x0D)
-      dimmer::sendCmdGetState();
-    else if (telnetCmd[0] == 'b' && telnetCmd[1] == 'r' && telnetCmd[6] == 0x0D)
+      light::sendCmdGetState();
+    else if (telnetCmd[0] == 'b' && telnetCmd[1] == 'r' && telnetCmd[5] == 0x0D)
     {
       // '0' to '9' to set the brightness from 0% to 90%
-      uint16_t v = (telnetCmd[2] - '0') * 1000 + (telnetCmd[3] - '0') * 100 + (telnetCmd[4] - '0') * 10 + (telnetCmd[5] - '0');
-      if (v >= 0 && v <= 1000)
-        dimmer::setBrightness(v);
+      uint16_t v = (telnetCmd[2] - '0') * 100 + (telnetCmd[3] - '0') * 10 + (telnetCmd[4] - '0');
+      if (v >= 0 && v <= 100)
+        light::setBrightness(v);
       else
         logging::getLogStream().printf("wrong value for the brightness: %d\n", v);
     }
     else if (telnetCmd[0] == 'v' && telnetCmd[1] == 0x0D)
-      dimmer::sendCmdGetVersion();
+      light::sendCmdGetVersion();
     else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'n' && telnetCmd[2] == 0x0D)
-      dimmer::switchOn();
+      light::lightOn();
     else if (telnetCmd[0] == 'o' && telnetCmd[1] == 'f' && telnetCmd[2] == 'f' && telnetCmd[3] == 0x0D)
-      dimmer::switchOff();
+      light::lightOff();
     else if (telnetCmd[0] == 't' && telnetCmd[1] == 'e'&& telnetCmd[2] == 'm' && telnetCmd[3] == 'p' && telnetCmd[4] == 0x0D)
       switches::getTemperatureLogging()=!switches::getTemperatureLogging();
+    else if (telnetCmd[0] == 'r' && telnetCmd[1] == 'e' && telnetCmd[2] == 's' && telnetCmd[3] == 0x0D)
+      light::resetSTM32();
     else if (telnetCmd[0] == 'b' && telnetCmd[1] == 'l' && telnetCmd[6] == 0x0D)
     {
       uint16_t v = (telnetCmd[2] - '0') * 1000 + (telnetCmd[3] - '0') * 100 + (telnetCmd[4] - '0') * 10 + (telnetCmd[5] - '0');
       if (v >= 0 && v <= 1000)
-        dimmer::setBlinkingDuration(v);
+        light::setBlinkingDuration(v);
       else
         logging::getLogStream().printf("wrong value for the blink duration: %d\n", v);
     }
@@ -249,13 +252,13 @@ void disableTelnet()
 }
 
 
-void displayFile(const String &fileName)
+void displayFile()
 {
   if (SPIFFS.begin())
   {
-    if (SPIFFS.exists(fileName))
+    if (SPIFFS.exists(wifi::getWifiManager().server.get()->uri()))
     {
-      File logFile = SPIFFS.open(fileName, "r");
+      File logFile = SPIFFS.open(wifi::getWifiManager().server.get()->uri(), "r");
       if (logFile)
       {
         size_t fileSize = logFile.size();

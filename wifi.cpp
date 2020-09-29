@@ -30,10 +30,11 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("defaultReleaseState", "Default release state (0: open, 1: close)", "0", 1),
 
   // The dimmer parameters
-  WiFiManagerParameter("<br/><br/><hr><h3>Dimmer parameters</h3>"),
-  WiFiManagerParameter("minBrighness", "Minimum brightness (0‰ to 200‰)", "0", 4),
-  WiFiManagerParameter("maxBrighness", "Maximum brightness (0‰ to 1000‰)", "500", 4),
-  WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge (LED), 1: leading edge (halogen))", "2", 1),
+  WiFiManagerParameter("<br/><br/><hr><h3>Light parameters</h3>"),
+  WiFiManagerParameter("minBrightness", "Minimum brightness (0% to 20%)", "0", 3),
+  WiFiManagerParameter("maxBrightness", "Maximum brightness (0% to 100%)", "50", 3),
+  WiFiManagerParameter("autoOffTimer", "Auto-off timer (value in seconds)", "", 3),
+  WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge (LED), 1: leading edge (halogen))", "0", 1),
   WiFiManagerParameter("flickerDebounce", "Anti-flickering debounce (50 - 150)", "100", 3),
 
   // The MQTT server parameters
@@ -43,19 +44,21 @@ WiFiManagerParameter customParamInit[] = {
 
   // The MQTT publish
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT publish</h3>"),
-  WiFiManagerParameter("pubMqttBrighnessLevel", "Brightness change", "brighness", 100),
-  WiFiManagerParameter("pubMqttSwitchEvents", "Switch events", "switchEvent", 100),
-  WiFiManagerParameter("pubMqttOverheat", "Overheat alarm", "overheat", 100),
+  WiFiManagerParameter("pubMqttBrightnessLevel", "Brightness change", "light/shellyDevice", 100),
+  WiFiManagerParameter("pubMqttSwitchEvents", "Switch events", "switch/shellyDevice", 100),
+  WiFiManagerParameter("pubMqttOverheat", "Overheat alarm", "overheat/shellyDevice", 100),
+  WiFiManagerParameter("pubMqttTemperature", "Internal temperature", "temperature/shellyDevice", 100),
+  WiFiManagerParameter("pubMqttConnecting", "Connecting to the broker", "connecting/shellyDevice", 100),
 
   // The MQTT subscribe
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT subscribe</h3>"),
-  WiFiManagerParameter("subMqttLightOn", "Topic for switching on", "switchOn", 100),
+  WiFiManagerParameter("subMqttLightOn", "Topic for switching on", "switchOn/shellyDevice", 100),
   WiFiManagerParameter("subMqttLightAllOn", "Topic for switching on all lights", "switchOnAll", 100),
-  WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff", 100),
+  WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff/shellyDevice", 100),
   WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 100),
-  WiFiManagerParameter("subMqttStartBlink", "Topic for starting blink", "startBlink", 100),
-  WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blink", "startFastBlink", 100),
-  WiFiManagerParameter("subMqttStopBlink", "Topic for stopping blink", "stopBlink", 100),
+  WiFiManagerParameter("subMqttStartBlink", "Topic for starting blink", "startBlink/shellyDevice", 100),
+  WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blink", "startFastBlink/shellyDevice", 100),
+  WiFiManagerParameter("subMqttStopBlink", "Topic for stopping blink", "stopBlink/shellyDevice", 100),
 
   // The debugging options
   WiFiManagerParameter("<br/><br/><hr><h3>Debugging options</h3>"),
@@ -136,8 +139,8 @@ void updateSystemWithWifiManagerParams()
   // Update the configuration settings for the switches
   switches::updateParams();
 
-    // Update the configuration settings for the dimmer
-  dimmer::updateParams();
+  // Update the configuration settings for the dimmer
+  light::updateParams();
 }
 
 // callback to save the custom params
@@ -208,7 +211,7 @@ void loadParams()
         SPIFFS.end();
 
         // Process the json data
-        DynamicJsonDocument jsonBuffer(1024);
+        DynamicJsonDocument jsonBuffer(2048);
         DeserializationError error = deserializeJson(jsonBuffer, buf.get());
         if (!error)
         {
@@ -248,19 +251,13 @@ void loadParams()
     logging::getLogStream().println("wifi: failed to mounted file system");
 }
 
-void displayFile()
-{
-  logging::displayFile(wifiManager.server.get()->uri());
-}
-
-
 void bindServerCallback()
 {
   // This is to handle the web page for updating the firmware
   httpUpdater.setup(wifiManager.server.get(), "/update");
   // Handle for managing the log file on SPIFFS
-  wifiManager.server.get()->on("/log.txt", displayFile);
-  wifiManager.server.get()->on("/config.json", displayFile);
+  wifiManager.server.get()->on("/log.txt", logging::displayFile);
+  wifiManager.server.get()->on("/config.json", logging::displayFile);
   wifiManager.server.get()->on("/erase_log_file", logging::eraseLogFile);
 }
 
@@ -271,15 +268,12 @@ void setup()
   // Add the custom parameters
   for (int i = 0; i < sizeof(customParamInit) / sizeof(WiFiManagerParameter); i++)
     wifiManager.addParameter(&customParamInit[i]);
-
+  
   // Load the custom parameters
   loadParams();
   updateSystemWithWifiManagerParams();
 
   logging::getLogStream().println("wifi: starting WiFi...");
-
-  // for rebooting in 2 minutes if still in AP mode
-  wifiManager.setConfigPortalTimeout(120);
 
   // The menu options on the main page
   const char* menu[] = {"wifi", "info", "param", "restart"};
@@ -288,25 +282,45 @@ void setup()
   // Set the callback for saving the custom parameters
   wifiManager.setSaveParamsCallback(saveParams);
 
-  // Blocking at the access point
-  wifiManager.setConfigPortalBlocking(true);
-  String ssid = "SHELLY_DIMMER_2";          // SSID for the access point
+  // Non blocking at the access point
+  wifiManager.setConfigPortalBlocking(false);
 
-  if (wifiManager.autoConnect(ssid.c_str()))
+  // SSID for the access point
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  wifiManager.autoConnect(helpers::hexToStr(mac, 6));
+
+
+  // Slow blinking to show the AP mode
+  switches::enableBuiltinLedBlinking(switches::LED_SLOW_BLINKING);
+
+  // AP mode is enabled
+  unsigned long startAPTime=millis();
+  while(WiFi.status() != WL_CONNECTED)
   {
-    //if you get here you have connected to the WiFi
-    logging::getLogStream().println("wifi: connected to wifi network!");
-    WiFi.mode(WIFI_STA);
-    wifiManager.setWebServerCallback(bindServerCallback);     // Add the callback to handle the page for updating the firmware
-    wifiManager.startWebPortal();                             // Start the web server of WifiManager
+    // Process user interaction in AP mode
+    wifiManager.process();
+    // This is to make the light and switch working in AP mode
+    light::handle();
+    switches::handle();
+    
+    // After 2 minutes in access point, reboot automatically
+    if (millis() - startAPTime > 120000) 
+    {
+      logging::getLogStream().println("wifi: still in AP mode; reboot now");
+      wifiManager.reboot();
+      //ESP.restart();
+    }
   }
-  else
-  {
-    // If it goes here, still access point, will reboot
-    logging::getLogStream().println("wifi: still in AP mode; reboot now");
-    wifiManager.reboot();
-    //ESP.restart();
-  }
+  
+  //if you get here you have connected to the WiFi
+  logging::getLogStream().println("wifi: connected to wifi network!");
+  WiFi.mode(WIFI_STA);
+  wifiManager.setWebServerCallback(bindServerCallback);     // Add the callback to handle the page for updating the firmware
+  wifiManager.startWebPortal();                             // Start the web server of WifiManager
+
+  // Setup for MQTT
+  mqtt::setup();
 }
 
 

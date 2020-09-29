@@ -14,10 +14,9 @@ namespace mqtt
   boolean reconnect();
   void handle();
 
-  // Methodes for publishing to MQTT
-  void publishMQTTChangeBrightness(uint16_t brightnessLevel);
-  void publishMQTTChangeSwitch(uint8 swID, uint swState);
+  // Methods for publishing to MQTT
   void publishMQTTOverheating(int temperature);
+  void publishMQTT(const char *topic, const char *payload, int QoS=1);
 }
   
 

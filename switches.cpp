@@ -1,14 +1,11 @@
-#include <AceButton.h>
-#include <Ticker.h>
 #include "wifi.h"
 #include "logging.h"
-#include "dimmer.h"
+#include "light.h"
 #include "config.h"
 #include "mqtt.h"
 #include "switches.h"
 #include "ESP8266TimerInterrupt.h"
 
-using namespace ace_button;
 
 namespace switches {
   
@@ -18,52 +15,231 @@ namespace switches {
   float temperature;        // Internal temperature
 
   // The switch parameters
-  uint8 switchType=TOGGLE_BUTTON;
-  uint8 defaultSwitchReleaseState=LOW;
+  volatile uint8_t switchType=TOGGLE_BUTTON;
+  volatile uint8_t defaultSwitchReleaseState=LOW;
   bool temperatureLogging=true;
 
   // Getter
   float &getTemperature(){return temperature;}
-  uint8 &getSwitchType(){return switchType;}
-  uint8 &getDefaultSwitchReleaseState(){return defaultSwitchReleaseState;}
   bool &getTemperatureLogging(){return temperatureLogging;}
   
   // For the temperature
   unsigned long prevTime = millis();
 
-  // For the switches
-  // Parameters: pin, initial state for release state, id
-  AceButton swInt(SHELLY_BUILTIN_SWITCH,HIGH,0);
-  AceButton sw1(SHELLY_SW1,LOW,1);
-  AceButton sw2(SHELLY_SW2,LOW,2);
-
-  void handleSWEvent(AceButton*, uint8_t, uint8_t);
+  // For the LED switching
+  volatile uint8_t ledBlinkDuration=0;
+  volatile uint8_t ledBlinkTickCounter=0;
 
 
-  void ICACHE_RAM_ATTR builtinLedBlinking(void)
+  // For computing the current state for the switch 
+  #ifdef SHELLY_SW0
+  volatile uint8_t sw0StateFrame[5];
+  volatile uint8_t sw0StateFrameDuration[5];
+  #endif
+
+  #ifdef SHELLY_SW1
+  volatile uint8_t sw1StateFrame[5];
+  volatile uint8_t sw1StateFrameDuration[5];
+  #endif
+
+  #ifdef SHELLY_SW2
+  volatile uint8_t sw2StateFrame[5];
+  volatile uint8_t sw2StateFrameDuration[5];
+  #endif
+
+  // The current state of the switch
+  volatile uint8_t sw0State=ALREADY_PUBLISHED;
+  volatile uint8_t sw1State=ALREADY_PUBLISHED;
+  volatile uint8_t sw2State=ALREADY_PUBLISHED;
+
+  void enableBuiltinLedBlinking(uint8_t ledMode)
   {
-    digitalWrite(SHELLY_BUILTIN_LED, !(digitalRead(SHELLY_BUILTIN_LED)));  //Invert Current State of LED  
+    ledBlinkTickCounter=0;
+    pinMode(SHELLY_BUILTIN_LED, OUTPUT);
+    switch(ledMode)
+    {
+      case LED_OFF:
+      ledBlinkDuration=0;         // No blinking
+      digitalWrite(SHELLY_BUILTIN_LED, HIGH);
+      break;
+      case LED_FAST_BLINKING:
+      ledBlinkDuration=2;         // 100 ms
+      break;
+      case LED_SLOW_BLINKING:
+      ledBlinkDuration=5;         // 250 ms
+      break;
+      case LED_ON:
+      ledBlinkDuration=0;         // No blinking
+      digitalWrite(SHELLY_BUILTIN_LED, LOW);
+      break;
+    }
   }
   
-  void enableBuiltinLedBlinking(bool enable)
+  uint8_t getSwStateToPublish(uint8_t switchID)
   {
-    pinMode(SHELLY_BUILTIN_LED, OUTPUT);
-    if (enable)
+    uint8_t temp;
+    switch(switchID)
     {
-      ITimer.attachInterruptInterval(1000 * 250, builtinLedBlinking);
+      case 0:
+      temp=sw0State;
+      sw0State=ALREADY_PUBLISHED;
+      return temp;
+      case 1:
+      temp=sw1State;
+      sw1State=ALREADY_PUBLISHED;
+      return temp;
+      case 2:
+      temp=sw2State;
+      sw2State=ALREADY_PUBLISHED;
+      return temp;
+    }
+    return ALREADY_PUBLISHED;
+  }
+
+  volatile uint8_t ICACHE_RAM_ATTR processFrame(volatile uint8_t newState, volatile uint8_t *swStateFrame, volatile uint8_t *swStateFrameDuration)
+  {
+    if (newState != swStateFrame[4])
+    {
+      swStateFrame[0]=swStateFrame[1];
+      swStateFrame[1]=swStateFrame[2];
+      swStateFrame[2]=swStateFrame[3];
+      swStateFrame[3]=swStateFrame[4];
+      swStateFrame[4]=newState;
+      
+      swStateFrameDuration[0]=swStateFrameDuration[1];
+      swStateFrameDuration[1]=swStateFrameDuration[2];
+      swStateFrameDuration[2]=swStateFrameDuration[3];
+      swStateFrameDuration[3]=swStateFrameDuration[4];
+      swStateFrameDuration[4]=1;
+    }
+    else if (swStateFrameDuration[4]<254)
+      swStateFrameDuration[4]++;
+
+    if (switchType==TOGGLE_BUTTON)
+    {
+      // Toggle button
+      if (swStateFrame[4]==!defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      {
+        light::lightToggle();
+        return BUTTON_PRESS;
+      }
+      else if (swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      {
+        light::lightToggle();
+        return BUTTON_RELEASE;
+      }
     }
     else
     {
-      ITimer.detachInterrupt();
-      digitalWrite(SHELLY_BUILTIN_LED, LOW);  // LED on
+      // Push button
+      if (swStateFrame[0]==defaultSwitchReleaseState &&
+          swStateFrame[1]!=defaultSwitchReleaseState && swStateFrameDuration[1]<LONG_CLICK_DURATION &&
+          swStateFrame[2]==defaultSwitchReleaseState && swStateFrameDuration[2]<LONG_CLICK_DURATION &&
+          swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
+          swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      {
+        // Also detect double click
+        return BUTTON_DOUBLE_CLICK;
+      }
+      else if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      {
+        // short click
+        light::lightToggle();
+        return BUTTON_SHORT_CLICK;
+      }
+      else if (swStateFrame[3]==defaultSwitchReleaseState && swStateFrame[4]!=defaultSwitchReleaseState && swStateFrameDuration[4]==LONG_CLICK_DURATION)
+      {
+        // Long click
+        light::lightToggle();
+        return BUTTON_LONG_CLICK;
+      }
+    }
+    return NO_CHANGE;
+  }
+  
+  void ICACHE_RAM_ATTR checkSwitch(void)
+  {
+    volatile uint8_t newState,tmp;
+
+    #ifdef SHELLY_SW0
+    newState=digitalRead(SHELLY_SW0);
+    tmp=processFrame(newState, sw0StateFrame, sw0StateFrameDuration);
+    if (tmp!=NO_CHANGE)
+      sw0State=tmp;
+    #endif
+    
+    #ifdef SHELLY_SW1
+    newState=digitalRead(SHELLY_SW1);
+    tmp=processFrame(newState, sw1StateFrame, sw1StateFrameDuration);
+    if (tmp!=NO_CHANGE)
+      sw1State=tmp;
+    #endif
+
+    #ifdef SHELLY_SW2
+    newState=digitalRead(SHELLY_SW2);
+    tmp=processFrame(newState, sw2StateFrame, sw2StateFrameDuration); 
+    if (tmp!=NO_CHANGE)
+      sw2State=tmp;   
+    #endif
+
+    // For the built-in led blinking
+    if (ledBlinkDuration>0)
+    {
+      ledBlinkTickCounter++;
+      if (ledBlinkTickCounter>ledBlinkDuration)
+      {
+        digitalWrite(SHELLY_BUILTIN_LED, !(digitalRead(SHELLY_BUILTIN_LED)));  //Invert Current State of LED
+        ledBlinkTickCounter=0;
+      }
     }
   }
+  
+  
+  void setup()
+  {
+    uint8_t state;
+    
+    #ifdef SHELLY_SW0
+    pinMode(SHELLY_SW0, INPUT_PULLUP);  // only works with INPUT_PULLUP
+    state=digitalRead(SHELLY_SW0);
+    for (int i=0;i<sizeof(sw0StateFrame);i++)
+    {
+      sw0StateFrameDuration[i]=255;
+      sw0StateFrame[i]=state;
+    }
+    #endif
 
+    #ifdef SHELLY_SW1
+    pinMode(SHELLY_SW1, INPUT);
+    state=digitalRead(SHELLY_SW1);
+    // Initialise the frame with the current state of the switch
+    // By default, the light is off when the switch is powering on
+    for (int i=0;i<sizeof(sw1StateFrame);i++)
+    {
+      sw1StateFrameDuration[i]=255;
+      sw1StateFrame[i]=state;
+    }
+    #endif
+    
+    #ifdef SHELLY_SW2
+    pinMode(SHELLY_SW2, INPUT);
+    state=digitalRead(SHELLY_SW2);
+    for (int i=0;i<sizeof(sw2StateFrame);i++)
+    {
+      sw2StateFrameDuration[i]=255;
+      sw2StateFrame[i]=state;
+    }
+    #endif
+    
+    // Interrup every 25 ms, misses click with 50 ms
+    ITimer.attachInterruptInterval(1000 * 25, checkSwitch);
+  }
 
   void overheating()
   {
     logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
-    dimmer::setBrightness(0);
+    light::setBrightness(0);            // Brightness to 0
+    light::setBlinkingDuration(0);      // Stop blinking
     mqtt::publishMQTTOverheating(temperature);
   }
 
@@ -100,8 +276,6 @@ namespace switches {
     #define ANALOG_NTC_BRIDGE_RESISTANCE  32000            // NTC Voltage bridge resistor
     #define ANALOG_NTC_RESISTANCE         10000            // NTC Resistance
     #define ANALOG_NTC_B_COEFFICIENT      3350             // NTC Beta Coefficient
-    #define TO_CELSIUS(x) ((x) - 273.15)
-    #define TO_KELVIN(x) ((x) + 273.15)
     // Parameters for equation
     #define TO_CELSIUS(x) ((x) - 273.15)
     #define TO_KELVIN(x) ((x) + 273.15)
@@ -119,120 +293,51 @@ namespace switches {
 
   void updateParams()
   {
-    logging::getLogStream().println("switches::updateParams");
+    logging::getLogStream().println("switches: updateParams");
     setSwitchType(wifi::getParamValueFromID("switchType"));
     setDefaultSwitchReleaseState(wifi::getParamValueFromID("defaultReleaseState"));
-    
-    ButtonConfig* buttonConfig;
-
-    pinMode(SHELLY_BUILTIN_SWITCH, INPUT_PULLUP);  // only works with INPUT_PULLUP
-    buttonConfig = swInt.getButtonConfig();
-    buttonConfig->setFeature(ButtonConfig::kFeatureClick);
-    buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
-    buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
-    buttonConfig->setFeature(ButtonConfig::kFeatureRepeatPress);
-
-    sw1.init(SHELLY_SW1, getDefaultSwitchReleaseState(), 1);
-    pinMode(SHELLY_SW1, INPUT);
-    buttonConfig = sw1.getButtonConfig();
-    buttonConfig->resetFeatures();
-    if (getSwitchType()==PUSH_BUTTON)
-    {
-      buttonConfig->setFeature(ButtonConfig::kFeatureClick);
-      buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
-      buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
-      //buttonConfig->setFeature(ButtonConfig::kFeatureRepeatPress);
-    }
-
-    sw2.init(SHELLY_SW2, getDefaultSwitchReleaseState(), 2);
-    pinMode(SHELLY_SW2, INPUT);
-    buttonConfig = sw2.getButtonConfig();
-    buttonConfig->resetFeatures();
-    if (getSwitchType()==PUSH_BUTTON)
-    {
-      buttonConfig->setFeature(ButtonConfig::kFeatureClick);
-      buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
-      buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
-      //buttonConfig->setFeature(ButtonConfig::kFeatureRepeatPress);
-    }
   }
 
-  void setup()
+  void publishMQTTChangeSwitch(uint8_t switchID)
   {
-    ButtonConfig* buttonConfig;
-    buttonConfig = sw1.getButtonConfig();
-    buttonConfig->setClickDelay(500);             // default: 200
-    buttonConfig->setLongPressDelay(500);     // default: 1000
-    buttonConfig = sw2.getButtonConfig();
-    buttonConfig->setClickDelay(500);             // default: 200
-    buttonConfig->setLongPressDelay(500);     // default: 1000
-
-    // Same event handler for all switches
-    buttonConfig->setEventHandler(handleSWEvent);
+    uint8_t newState=getSwStateToPublish(switchID);
+    if (newState!=ALREADY_PUBLISHED)
+    {
+      const char* topic=wifi::getParamValueFromID("pubMqttSwitchEvents");
+      // If no topic, we do not publish
+      if (topic!=NULL)
+      {
+        char payload[4];
+        sprintf(payload,"%d %d",switchID,newState);
+        mqtt::publishMQTT(topic,payload);
+      }
+    }
   }
   
   void handle()
   { 
-    // Check the switches
-    swInt.check();
-    sw1.check();
-    sw2.check();
-
+    // Publish new values to MQTT if needed
+    #ifdef SHELLY_SW0
+    publishMQTTChangeSwitch(0);
+    #endif
+    #ifdef SHELLY_SW1
+    publishMQTTChangeSwitch(1);
+    #endif
+    #ifdef SHELLY_SW2
+    publishMQTTChangeSwitch(2);
+    #endif
+    
     // Check the internal temperature every 5 seconds
-    if(millis() - prevTime > 5000)
+    unsigned long now=millis();
+    if(now - prevTime > 5000)
     {
-        prevTime = millis();
+        prevTime = now;
         switches::getTemperature() = readTemperature();
         if (temperatureLogging)
           logging::getLogStream().printf("temperature: %f\n", switches::getTemperature());
         // If temperature is above 95°C, the light is switched off
         if (switches::getTemperature()>95.0)
           overheating();
-    }
-  }
-
-  void handleSWEvent(AceButton* sw, uint8_t eventType, uint8_t buttonState)
-  {
-    logging::getLogStream().printf("switches: eventType: %d, buttonState: %d, switchType: %d\n",eventType,buttonState,getSwitchType());
-    // For the built-in switch
-    if (sw->getId()==0)
-    {
-      return;
-    }
-    switch (eventType) {
-      case AceButton::kEventPressed:
-        if (getSwitchType()==TOGGLE_BUTTON)
-        {
-          logging::getLogStream().printf("button: SW%d pressed\n", sw->getId());
-          dimmer::switchOn();
-          mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
-        }
-        break;
-      case AceButton::kEventReleased:
-        if (getSwitchType()==TOGGLE_BUTTON)
-        {
-          logging::getLogStream().printf("button: SW%d released\n", sw->getId());
-          dimmer::switchOff();
-          mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
-        }
-        break;
-      case AceButton::kEventClicked:
-        if (getSwitchType()==PUSH_BUTTON)
-        {
-          logging::getLogStream().printf("button: SW%d clicked\n", sw->getId());
-          dimmer::switchToggle();
-          mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
-        }
-        break;
-      case AceButton::kEventLongPressed:
-        if (getSwitchType()==PUSH_BUTTON)
-        {
-          logging::getLogStream().printf("button: SW%d long pressed\n", sw->getId());
-          // Toggle the brighness
-          dimmer::switchToggle();
-          mqtt::publishMQTTChangeSwitch(sw->getId(),eventType);
-        }
-        break;
     }
   }
 
