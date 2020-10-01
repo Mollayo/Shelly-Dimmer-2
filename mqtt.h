@@ -4,7 +4,6 @@
 #include "config.h"
 #include "wifi.h"
 #include "switches.h"
-#include <PubSubClient.h>
 
 namespace mqtt
 { 

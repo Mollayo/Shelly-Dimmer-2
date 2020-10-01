@@ -19,7 +19,7 @@ uint8_t publishedBrightness = 0;      // The last brigthness value published to 
 uint8_t wattage = 0;
 
 // For the auto-off timer
-uint16_t autoOffDuration = 0;
+uint16_t autoOffDuration = 0;         // In seconds
 unsigned long lastLightOnTime = 0;
 
 // For blinking
@@ -28,7 +28,7 @@ uint16_t blinkingDuration = 0;   // in ms; if 0, no blinking
 bool blinkingLightState = false;
 
 
-uint8 &getWattage() {
+uint8_t &getWattage() {
   return wattage;
 }
 
@@ -112,10 +112,10 @@ void processReceivedPacket(uint8_t payload_cmd, uint8_t* payload, uint8_t payloa
   {
     logging::getLogStream().printf("- state: %s\n", helpers::hexToStr(payload, payload_size));
     // Bightness level: payload[3] payload[2]
-    brightness = ((payload[3] << 8) + payload[2]) / 1;
+    brightness = ((payload[3] << 8) + payload[2]) / 10;
     wattage = ((payload[7] << 8) + payload[6]) / 20;
-    logging::getLogStream().printf("- brightness level: %d‰\n", brightness);
-    logging::getLogStream().printf("- wattage level: %d\n", wattage);
+    logging::getLogStream().printf("- brightness level: %d%%\n", brightness);
+    logging::getLogStream().printf("- wattage level: %d watts\n", wattage);
 
     // To be done: other state values
     // See here:
@@ -343,7 +343,6 @@ void setAutoOffTimer(const char* str)
     return;
   }
 
-  // Make the conversion from ms to s
   autoOffDuration = atoi (str);
 }
 
@@ -378,6 +377,11 @@ ICACHE_RAM_ATTR void lightToggle()
     sendCmdSetBrightness(minBrightness);
     brightness = minBrightness;
   }
+}
+
+bool lightIsOn()
+{
+  return brightness>minBrightness;
 }
 
 void setBlinkingDuration(uint16_t duration)
@@ -486,7 +490,7 @@ void handle()
   {
     currTime = millis();
     // Make the conversion from ms to s
-    if (currTime - lastLightOnTime > autoOffDuration*1000)
+    if (currTime - lastLightOnTime > (autoOffDuration*1000))
     {
       logging::getLogStream().printf("light: auto-off light\n");
       lightOff();

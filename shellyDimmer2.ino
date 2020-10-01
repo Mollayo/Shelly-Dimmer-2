@@ -35,14 +35,14 @@ void setup()
 void loop()
 {
   wifi::handle();
-  
+
   // Process the telnet commands
   // Interactive console for debugging
   logging::handle();
-  
+
   // Process data for MQTT
   mqtt::handle();
-  
+
   // Process serial data from the MCU
   light::handle();
 

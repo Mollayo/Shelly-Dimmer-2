@@ -63,10 +63,10 @@ namespace switches {
       digitalWrite(SHELLY_BUILTIN_LED, HIGH);
       break;
       case LED_FAST_BLINKING:
-      ledBlinkDuration=2;         // 100 ms
+      ledBlinkDuration=4;         // 100 ms
       break;
       case LED_SLOW_BLINKING:
-      ledBlinkDuration=5;         // 250 ms
+      ledBlinkDuration=10;         // 250 ms
       break;
       case LED_ON:
       ledBlinkDuration=0;         // No blinking
@@ -121,12 +121,12 @@ namespace switches {
       if (swStateFrame[4]==!defaultSwitchReleaseState && swStateFrameDuration[4]==1)
       {
         light::lightToggle();
-        return BUTTON_PRESS;
+        return BUTTON_ON;
       }
       else if (swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
       {
         light::lightToggle();
-        return BUTTON_RELEASE;
+        return BUTTON_OFF;
       }
     }
     else
@@ -307,9 +307,40 @@ namespace switches {
       // If no topic, we do not publish
       if (topic!=NULL)
       {
-        char payload[4];
-        sprintf(payload,"%d %d",switchID,newState);
-        mqtt::publishMQTT(topic,payload);
+        char payload[20];
+        switch(newState)
+        {
+          case BUTTON_OFF:
+          if (light::lightIsOn())
+            mqtt::publishMQTT(topic,"BUTTON_OFF LIGHT_ON");
+          else
+            mqtt::publishMQTT(topic,"BUTTON_OFF LIGHT_OFF");
+          break; 
+          case BUTTON_ON:
+          if (light::lightIsOn())
+            mqtt::publishMQTT(topic,"BUTTON_ON LIGHT_ON");
+          else
+            mqtt::publishMQTT(topic,"BUTTON_ON LIGHT_OFF");
+          break; 
+          case BUTTON_SHORT_CLICK:
+          if (light::lightIsOn())
+            mqtt::publishMQTT(topic,"BUTTON_SHORT_CLICK LIGHT_ON");
+          else
+            mqtt::publishMQTT(topic,"BUTTON_SHORT_CLICK LIGHT_OFF");
+          break; 
+          case BUTTON_LONG_CLICK:
+          if (light::lightIsOn())
+            mqtt::publishMQTT(topic,"BUTTON_LONG_CLICK LIGHT_ON");
+          else
+            mqtt::publishMQTT(topic,"BUTTON_LONG_CLICK LIGHT_OFF");
+          break; 
+          case BUTTON_DOUBLE_CLICK:
+          if (light::lightIsOn())
+            mqtt::publishMQTT(topic,"BUTTON_DOUBLE_CLICK LIGHT_ON");
+          else
+            mqtt::publishMQTT(topic,"BUTTON_DOUBLE_CLICK LIGHT_OFF");
+          break; 
+        }
       }
     }
   }

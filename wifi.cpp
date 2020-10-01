@@ -26,6 +26,7 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("</form><form action=\"/update\"><input type=\"submit\" value=\"Update firmware\"></form><form action=\"/paramsave\">"),
   // The switch parameters
   WiFiManagerParameter("<br/><br/><hr><h3>Switch parameters</h3>"),
+  WiFiManagerParameter("hostname", "Hostname and access point name (require reboot)", "", 30),
   WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "2", 1),
   WiFiManagerParameter("defaultReleaseState", "Default release state (0: open, 1: close)", "0", 1),
 
@@ -56,13 +57,13 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("subMqttLightAllOn", "Topic for switching on all lights", "switchOnAll", 100),
   WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff/shellyDevice", 100),
   WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 100),
-  WiFiManagerParameter("subMqttStartBlink", "Topic for starting blink", "startBlink/shellyDevice", 100),
-  WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blink", "startFastBlink/shellyDevice", 100),
-  WiFiManagerParameter("subMqttStopBlink", "Topic for stopping blink", "stopBlink/shellyDevice", 100),
+  WiFiManagerParameter("subMqttStartBlink", "Topic for starting blinking", "startBlink/shellyDevice", 100),
+  WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blinking", "startFastBlink/shellyDevice", 100),
+  WiFiManagerParameter("subMqttStopBlink", "Topic for stopping blinking", "stopBlink/shellyDevice", 100),
 
   // The debugging options
   WiFiManagerParameter("<br/><br/><hr><h3>Debugging options</h3>"),
-  WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to a file)", "0", 1),
+  WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to a file)", "2", 1),
   WiFiManagerParameter("<a href=\"/log.txt\">Open_the_log_file</a>&emsp;<a href=\"/erase_log_file\">Erase_the_log_file</a><br/><br/>"),
 };
 
@@ -130,6 +131,11 @@ int getIndexFromID(const char* str)
 // Update the system with the new params
 void updateSystemWithWifiManagerParams()
 {
+  // Update the configuration for the wifiManager
+  const char* hn=getParamValueFromID("hostname");
+  if (hn!=NULL && strlen(hn)>0)
+   wifiManager.setHostname(hn);
+  
   // Update the configuration settings for logging -> should be done first
   logging::updateParams();
 
@@ -286,10 +292,15 @@ void setup()
   wifiManager.setConfigPortalBlocking(false);
 
   // SSID for the access point
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
-  wifiManager.autoConnect(helpers::hexToStr(mac, 6));
-
+  const char* hn=getParamValueFromID("hostname");
+  if (hn!=NULL && strlen(hn)>0)
+    wifiManager.autoConnect(hn);
+  else
+  {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    wifiManager.autoConnect(helpers::hexToStr(mac, 6));
+  }
 
   // Slow blinking to show the AP mode
   switches::enableBuiltinLedBlinking(switches::LED_SLOW_BLINKING);
