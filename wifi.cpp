@@ -315,8 +315,8 @@ void setup()
     light::handle();
     switches::handle();
     
-    // After 2 minutes in access point, reboot automatically
-    if (millis() - startAPTime > 120000) 
+    // After 1 minute in access point, reboot automatically
+    if (millis() - startAPTime > 60000) 
     {
       logging::getLogStream().println("wifi: still in AP mode; reboot now");
       wifiManager.reboot();

@@ -8,7 +8,31 @@
 
 
 namespace switches {
+
+  #define TEMPERATURE_SENSOR A0   // Correct value
+
+  #define TOGGLE_BUTTON 2
+  #define PUSH_BUTTON   1
   
+  // The possible states for the switches
+  #define BUTTON_OFF                  0
+  #define BUTTON_ON                   1
+  #define BUTTON_OFF_ON_OFF           2
+  #define BUTTON_ON_OFF_ON            3
+  #define BUTTON_SHORT_CLICK          4
+  #define BUTTON_LONG_CLICK           5
+  #define BUTTON_DOUBLE_CLICK         6
+  char *BUTTON_STATE_STR[] = { "BUTTON_OFF", "BUTTON_ON",  "BUTTON_OFF_ON_OFF", "BUTTON_ON_OFF_ON", "BUTTON_SHORT_CLICK", "BUTTON_LONG_CLICK", "BUTTON_DOUBLE_CLICK"};
+
+  
+  #define ALREADY_PUBLISHED           255
+  #define NO_CHANGE                   255
+
+  #define INTERRUP_TIME       25      // Every 25 ms
+  #define SLOW_LED_BLINKING   10      // 250 ms
+  #define FAST_LED_BLINKNG    4       // 100 ms
+  #define LONG_CLICK_DURATION 20      // 500 ms to detect long click
+  #define DEBOUNCE_DURATION   8       // 200 ms
   
   ESP8266Timer ITimer;      // For the builtin Leb blinking
 
@@ -98,7 +122,12 @@ namespace switches {
 
   volatile uint8_t ICACHE_RAM_ATTR processFrame(volatile uint8_t newState, volatile uint8_t *swStateFrame, volatile uint8_t *swStateFrameDuration)
   {
-    if (newState != swStateFrame[4])
+    // For debouncing
+    if (swStateFrameDuration[4]<DEBOUNCE_DURATION)
+    {
+      swStateFrameDuration[4]++;
+    }
+    else if (newState != swStateFrame[4])
     {
       swStateFrame[0]=swStateFrame[1];
       swStateFrame[1]=swStateFrame[2];
@@ -118,27 +147,49 @@ namespace switches {
     if (switchType==TOGGLE_BUTTON)
     {
       // Toggle button
-      if (swStateFrame[4]==!defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
       {
         light::lightToggle();
-        return BUTTON_ON;
+        if (light::lightIsOn())
+          return BUTTON_ON_OFF_ON;
+        else
+          return BUTTON_OFF_ON_OFF;
+      }
+      else if (swStateFrame[3]==defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]!=defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      {
+        light::lightToggle();
+        if (light::lightIsOn())
+          return BUTTON_ON_OFF_ON;
+        else
+          return BUTTON_OFF_ON_OFF;
+      }
+      else if (swStateFrame[4]!=defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      {
+        light::lightToggle();
+        if (light::lightIsOn())
+          return BUTTON_ON;
+        else
+          return BUTTON_OFF;
       }
       else if (swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
       {
         light::lightToggle();
-        return BUTTON_OFF;
+        if (light::lightIsOn())
+          return BUTTON_ON;
+        else
+          return BUTTON_OFF;
       }
     }
     else
     {
       // Push button
+      // Detect double click
       if (swStateFrame[0]==defaultSwitchReleaseState &&
           swStateFrame[1]!=defaultSwitchReleaseState && swStateFrameDuration[1]<LONG_CLICK_DURATION &&
           swStateFrame[2]==defaultSwitchReleaseState && swStateFrameDuration[2]<LONG_CLICK_DURATION &&
           swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
           swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
       {
-        // Also detect double click
         return BUTTON_DOUBLE_CLICK;
       }
       else if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
@@ -232,7 +283,7 @@ namespace switches {
     #endif
     
     // Interrup every 25 ms, misses click with 50 ms
-    ITimer.attachInterruptInterval(1000 * 25, checkSwitch);
+    ITimer.attachInterruptInterval(1000 * INTERRUP_TIME, checkSwitch);
   }
 
   void overheating()
@@ -307,40 +358,12 @@ namespace switches {
       // If no topic, we do not publish
       if (topic!=NULL)
       {
-        char payload[20];
-        switch(newState)
-        {
-          case BUTTON_OFF:
-          if (light::lightIsOn())
-            mqtt::publishMQTT(topic,"BUTTON_OFF LIGHT_ON");
-          else
-            mqtt::publishMQTT(topic,"BUTTON_OFF LIGHT_OFF");
-          break; 
-          case BUTTON_ON:
-          if (light::lightIsOn())
-            mqtt::publishMQTT(topic,"BUTTON_ON LIGHT_ON");
-          else
-            mqtt::publishMQTT(topic,"BUTTON_ON LIGHT_OFF");
-          break; 
-          case BUTTON_SHORT_CLICK:
-          if (light::lightIsOn())
-            mqtt::publishMQTT(topic,"BUTTON_SHORT_CLICK LIGHT_ON");
-          else
-            mqtt::publishMQTT(topic,"BUTTON_SHORT_CLICK LIGHT_OFF");
-          break; 
-          case BUTTON_LONG_CLICK:
-          if (light::lightIsOn())
-            mqtt::publishMQTT(topic,"BUTTON_LONG_CLICK LIGHT_ON");
-          else
-            mqtt::publishMQTT(topic,"BUTTON_LONG_CLICK LIGHT_OFF");
-          break; 
-          case BUTTON_DOUBLE_CLICK:
-          if (light::lightIsOn())
-            mqtt::publishMQTT(topic,"BUTTON_DOUBLE_CLICK LIGHT_ON");
-          else
-            mqtt::publishMQTT(topic,"BUTTON_DOUBLE_CLICK LIGHT_OFF");
-          break; 
-        }
+        char payload[50];
+        if (light::lightIsOn())
+          sprintf(payload,"%s LIGHT_ON",BUTTON_STATE_STR[newState]);
+        else
+          sprintf(payload,"%s LIGHT_OFF",BUTTON_STATE_STR[newState]);
+        mqtt::publishMQTT(topic,payload);
       }
     }
   }

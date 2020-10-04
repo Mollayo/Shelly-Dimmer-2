@@ -23,7 +23,7 @@ namespace light
   void lightOn();
   void lightOff();
   ICACHE_RAM_ATTR void lightToggle();
-  bool lightIsOn();
+  ICACHE_RAM_ATTR bool lightIsOn();
 
   void resetSTM32();
 

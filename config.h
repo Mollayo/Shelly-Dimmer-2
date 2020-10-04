@@ -20,25 +20,8 @@
 #define LIGHT_RELAY 15            // Relay for swtiching on/off the light
 */
 
-#define TEMPERATURE_SENSOR A0   // Correct value
 
-
-#define TOGGLE_BUTTON 2
-#define PUSH_BUTTON   1
-
-// The possible states for the switches
-#define BUTTON_OFF                  0
-#define BUTTON_ON                   1
-#define BUTTON_SHORT_CLICK          2
-#define BUTTON_LONG_CLICK           3
-#define BUTTON_DOUBLE_CLICK         4
-
-#define ALREADY_PUBLISHED           255
-#define NO_CHANGE                   255
   
-#define LONG_CLICK_DURATION 10      // 500 ms to detect long click
-
-
 namespace helpers {
 
   bool isInteger(const char* str, uint maxLength=10);

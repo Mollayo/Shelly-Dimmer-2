@@ -379,7 +379,7 @@ ICACHE_RAM_ATTR void lightToggle()
   }
 }
 
-bool lightIsOn()
+ICACHE_RAM_ATTR bool lightIsOn()
 {
   return brightness>minBrightness;
 }
