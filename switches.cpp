@@ -28,11 +28,18 @@ namespace switches {
   #define ALREADY_PUBLISHED           255
   #define NO_CHANGE                   255
 
+/*
+  #define INTERRUP_TIME       10      // Every 10 ms
+  #define SLOW_LED_BLINKING   25      // 250 ms
+  #define FAST_LED_BLINKNG    10      // 100 ms
+  #define LONG_CLICK_DURATION 50      // 500 ms to detect long click
+  #define DEBOUNCE_DURATION   20      // 200 ms
+  */
   #define INTERRUP_TIME       25      // Every 25 ms
   #define SLOW_LED_BLINKING   10      // 250 ms
   #define FAST_LED_BLINKNG    4       // 100 ms
   #define LONG_CLICK_DURATION 20      // 500 ms to detect long click
-  #define DEBOUNCE_DURATION   8       // 200 ms
+  #define DEBOUNCE_DURATION   4       // 100 ms. If this value is too large, it does not detect double click
   
   ESP8266Timer ITimer;      // For the builtin Leb blinking
 
@@ -99,25 +106,20 @@ namespace switches {
     }
   }
   
-  uint8_t getSwStateToPublish(uint8_t switchID)
+  volatile uint8_t &getSwState(uint8_t switchID)
   {
     uint8_t temp;
     switch(switchID)
     {
       case 0:
-      temp=sw0State;
-      sw0State=ALREADY_PUBLISHED;
-      return temp;
+      return sw0State;
       case 1:
-      temp=sw1State;
-      sw1State=ALREADY_PUBLISHED;
-      return temp;
+      return sw1State;
       case 2:
-      temp=sw2State;
-      sw2State=ALREADY_PUBLISHED;
-      return temp;
+      return sw2State;
     }
-    return ALREADY_PUBLISHED;
+    logging::getLogStream().printf("switches: wrong switchID for getSwState().\n");
+    return sw0State;
   }
 
   volatile uint8_t ICACHE_RAM_ATTR processFrame(volatile uint8_t newState, volatile uint8_t *swStateFrame, volatile uint8_t *swStateFrameDuration)
@@ -183,7 +185,7 @@ namespace switches {
     else
     {
       // Push button
-      // Detect double click
+      // Detect double click -> does not work
       if (swStateFrame[0]==defaultSwitchReleaseState &&
           swStateFrame[1]!=defaultSwitchReleaseState && swStateFrameDuration[1]<LONG_CLICK_DURATION &&
           swStateFrame[2]==defaultSwitchReleaseState && swStateFrameDuration[2]<LONG_CLICK_DURATION &&
@@ -192,7 +194,8 @@ namespace switches {
       {
         return BUTTON_DOUBLE_CLICK;
       }
-      else if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      else if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
+               swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
       {
         // short click
         light::lightToggle();
@@ -351,8 +354,7 @@ namespace switches {
 
   void publishMQTTChangeSwitch(uint8_t switchID)
   {
-    uint8_t newState=getSwStateToPublish(switchID);
-    if (newState!=ALREADY_PUBLISHED)
+    if (getSwState(switchID)!=ALREADY_PUBLISHED)
     {
       const char* topic=wifi::getParamValueFromID("pubMqttSwitchEvents");
       // If no topic, we do not publish
@@ -360,10 +362,11 @@ namespace switches {
       {
         char payload[50];
         if (light::lightIsOn())
-          sprintf(payload,"%s LIGHT_ON",BUTTON_STATE_STR[newState]);
+          sprintf(payload,"%s LIGHT_ON",BUTTON_STATE_STR[getSwState(switchID)]);
         else
-          sprintf(payload,"%s LIGHT_OFF",BUTTON_STATE_STR[newState]);
-        mqtt::publishMQTT(topic,payload);
+          sprintf(payload,"%s LIGHT_OFF",BUTTON_STATE_STR[getSwState(switchID)]);
+        if (mqtt::publishMQTT(topic,payload))
+          getSwState(switchID)=ALREADY_PUBLISHED;
       }
     }
   }
@@ -386,11 +389,11 @@ namespace switches {
     if(now - prevTime > 5000)
     {
         prevTime = now;
-        switches::getTemperature() = readTemperature();
+        temperature = readTemperature();
         if (temperatureLogging)
-          logging::getLogStream().printf("temperature: %f\n", switches::getTemperature());
+          logging::getLogStream().printf("temperature: %f\n", temperature);
         // If temperature is above 95°C, the light is switched off
-        if (switches::getTemperature()>95.0)
+        if (temperature>95.0)
           overheating();
     }
   }

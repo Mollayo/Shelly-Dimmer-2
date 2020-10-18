@@ -11,7 +11,7 @@ namespace helpers {
     if (strlen(str)==0 || strlen(str)>maxLength)
       return false;
     // Check if every char is a digit
-    for (uint8 i=0;i<strlen(str);i++)
+    for (uint8_t i=0;i<strlen(str);i++)
       if (str[i]<'0' || str[i]>'9')
         return false;
     return true;

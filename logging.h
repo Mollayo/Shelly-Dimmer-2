@@ -31,7 +31,6 @@ namespace logging
   void disableTelnet();
   void printTelnetMenu();
 
-  void displayFile();
   void eraseLogFile();
 
   void updateParams();

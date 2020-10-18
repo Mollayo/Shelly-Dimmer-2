@@ -15,6 +15,7 @@ namespace light {
 volatile uint8_t minBrightness = 0;   // brightness values in %
 volatile uint8_t maxBrightness = 50;
 volatile uint8_t brightness = 0;
+uint8_t prevBrightness = 0;
 uint8_t publishedBrightness = 0;      // The last brigthness value published to MQTT
 uint8_t wattage = 0;
 
@@ -220,10 +221,6 @@ void receivePacket() {
   }
 }
 
-void sendCmdGetVersion() {
-  sendCommand(CMD_GET_VERSION, 0, 0);
-}
-
 ICACHE_RAM_ATTR void sendCmdSetBrightness(uint8_t b) 
 {
   //logging::getLogStream().printf("light: set brightness to %d‰\n", b);
@@ -238,11 +235,6 @@ ICACHE_RAM_ATTR void sendCmdSetBrightness(uint8_t b)
     sendCommand(CMD_SET_BRIGHTNESS_ADVANCED, payload, sizeof(payload));*/
   uint8_t payload[] = { (uint8_t)(b * 10), (uint8_t)((b * 10) >> 8)};             // b*10 second byte, b*10 first byte (little endian)
   sendCommand(CMD_SET_BRIGHTNESS, payload, sizeof(payload));
-}
-
-void sendCmdGetState() {
-  logging::getLogStream().printf("light: get state\n");
-  sendCommand(CMD_GET_STATE, NULL, 0);
 }
 
 void sendCmdSetDimmingParameters(uint8_t dimmingType, uint8_t debounce)
@@ -279,6 +271,35 @@ void sendCmdSetDimmingParameters(uint8_t dimmingType, uint8_t debounce)
   sendCommand(CMD_SET_DIMMING_TYPE_3, payload2, sizeof(payload2));
   delay(12);
   receivePacket();
+}
+
+void mqttCallback(const char* paramID, const char* payload)
+{
+  if (strcmp(paramID, "subMqttLightOn") == 0 || strcmp(paramID, "subMqttLightAllOn") == 0)
+  {
+    // reset the timer
+    lastLightOnTime  = millis();
+    lightOn();
+  }
+  else if (strcmp(paramID, "subMqttLightOff") == 0 || strcmp(paramID, "subMqttLightAllOff") == 0)
+    lightOff();
+  else if (strcmp(paramID, "subMqttStartBlink") == 0)
+    setBlinkingDuration(1000);
+  else if (strcmp(paramID, "subMqttStartFastBlink") == 0)
+    setBlinkingDuration(500);
+  else if (strcmp(paramID, "subMqttStopBlink") == 0)
+    setBlinkingDuration(0);
+}
+
+void sendCmdGetVersion() 
+{
+  sendCommand(CMD_GET_VERSION, 0, 0);
+}
+
+void sendCmdGetState() 
+{
+  logging::getLogStream().printf("light: get state\n");
+  sendCommand(CMD_GET_STATE, NULL, 0);
 }
 
 void setDimmingParameters(const char* dimmingTypeStr, const char* debounceStr)
@@ -420,7 +441,8 @@ void resetSTM32()
   sendCmdGetVersion();
 }
 
-void setup() {
+void setup() 
+{
   resetSTM32();
 }
 
@@ -441,17 +463,9 @@ void handle()
   // Process packets from the STM32 MCU
   receivePacket();
 
-  // Check if there is new brightness value of brightness
+  // Check if there is new brightness value to publish
   if (publishedBrightness != brightness)
   {
-    publishedBrightness=brightness;
-
-    // Set the auto-off timer for the brightness change
-    if (brightness > minBrightness)
-      lastLightOnTime  = millis();
-    else
-      lastLightOnTime = 0;
-
     // Publish the new value of the brightness
     const char* topic=wifi::getParamValueFromID("pubMqttBrightnessLevel");
     // If no topic, we do not publish
@@ -459,7 +473,9 @@ void handle()
     {  
       char payload[5];
       sprintf(payload,"%d",brightness);
-      mqtt::publishMQTT(topic,payload);
+      if (mqtt::publishMQTT(topic,payload))
+          // If the new brightness value has been succeefully published
+          publishedBrightness=brightness;
     }
   }
   
@@ -486,6 +502,15 @@ void handle()
   }
 
   // For the auto-off light
+  if (brightness != prevBrightness)
+  {
+    // Set the auto-off timer for the brightness change
+    if (brightness > minBrightness)
+      lastLightOnTime  = millis();
+    else
+      lastLightOnTime = 0;
+    prevBrightness=brightness;
+  }
   if (autoOffDuration>0 && lastLightOnTime>0)
   {
     currTime = millis();

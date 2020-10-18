@@ -16,14 +16,21 @@ namespace wifi {
 ESP8266HTTPUpdateServer httpUpdater;
 // The webserver for wifi and MQTT configuration
 WiFiManager wifiManager(logging::getLogStream());
-WiFiManager &getWifiManager(){return wifiManager;}
+WiFiManager &getWifiManager() {
+  return wifiManager;
+}
 
-
+const char version[] = "Build Date & Time: " __DATE__ ", " __TIME__;
 
 // Custom parameters for the MQTT
 WiFiManagerParameter customParamInit[] = {
   // Button for the firmware update
-  WiFiManagerParameter("</form><form action=\"/update\"><input type=\"submit\" value=\"Update firmware\"></form><form action=\"/paramsave\">"),
+  WiFiManagerParameter("</form>"),
+  WiFiManagerParameter(version),
+  WiFiManagerParameter("<form action=\"/update\"><input type=\"submit\" value=\"Update firmware\"></form>"),
+  WiFiManagerParameter("<form action=\"/config.json\"><input type=\"submit\" value=\"Download the configuration file\"></form>"),
+  WiFiManagerParameter("<form action=\"/upload\"><input type=\"submit\" value=\"Upload the configuration file\"></form>"),
+  WiFiManagerParameter("<form action=\"/paramsave\">"),
   // The switch parameters
   WiFiManagerParameter("<br/><br/><hr><h3>Switch parameters</h3>"),
   WiFiManagerParameter("hostname", "Hostname and access point name (require reboot)", "", 30),
@@ -132,10 +139,10 @@ int getIndexFromID(const char* str)
 void updateSystemWithWifiManagerParams()
 {
   // Update the configuration for the wifiManager
-  const char* hn=getParamValueFromID("hostname");
-  if (hn!=NULL && strlen(hn)>0)
-   wifiManager.setHostname(hn);
-  
+  const char* hn = getParamValueFromID("hostname");
+  if (hn != NULL && strlen(hn) > 0)
+    wifiManager.setHostname(hn);
+
   // Update the configuration settings for logging -> should be done first
   logging::updateParams();
 
@@ -165,32 +172,25 @@ void saveParams()
       continue;
     if (customParams[i]->getValue() == NULL)
       continue;
-    logging::getLogStream().printf("wifi: found custom param to save: \"%s\" with value \"%s\"\n",customParams[i]->getID(),customParams[i]->getValue());
+    logging::getLogStream().printf("wifi: found custom param to save: \"%s\" with value \"%s\"\n", customParams[i]->getID(), customParams[i]->getValue());
     jsonBuffer[customParams[i]->getID()] = customParams[i]->getValue();
   }
 
 
   // Open the file
-  if (SPIFFS.begin())
+  File configFile = SPIFFS.open("/config.json", "w");
+  if (!configFile)
   {
-    File configFile = SPIFFS.open("/config.json", "w");
-    if (!configFile)
-    {
-      SPIFFS.end();
-      logging::getLogStream().println("wifi: failed to open config.json");
-      return;
-    }
-    // Save the json object to the file
-    serializeJson(jsonBuffer, configFile);
-    // Close the file
-    configFile.close();
-    SPIFFS.end();
-    logging::getLogStream().printf("wifi: saving: ");
-    serializeJson(jsonBuffer, logging::getLogStream());
-    logging::getLogStream().println();
+    logging::getLogStream().println("wifi: failed to open config.json");
+    return;
   }
-  else
-    logging::getLogStream().println("wifi: failed to mounted file system");
+  // Save the json object to the file
+  serializeJson(jsonBuffer, configFile);
+  // Close the file
+  configFile.close();
+  logging::getLogStream().printf("wifi: saving: ");
+  serializeJson(jsonBuffer, logging::getLogStream());
+  logging::getLogStream().println();
 
   // Update the system with the new params
   updateSystemWithWifiManagerParams();
@@ -201,60 +201,143 @@ void saveParams()
 void loadParams()
 {
   logging::getLogStream().println("wifi: loading custom parameters");
-  if (SPIFFS.begin())
+  if (SPIFFS.exists("/config.json"))
   {
-    if (SPIFFS.exists("/config.json"))
+    File configFile = SPIFFS.open("/config.json", "r");
+    if (configFile)
     {
-      File configFile = SPIFFS.open("/config.json", "r");
-      if (configFile)
+      size_t size = configFile.size();
+      std::unique_ptr<char[]> buf(new char[size]);
+      configFile.readBytes(buf.get(), size);
+
+      // Close file
+      configFile.close();
+
+      // Process the json data
+      DynamicJsonDocument jsonBuffer(2048);
+      DeserializationError error = deserializeJson(jsonBuffer, buf.get());
+      if (!error)
       {
-        size_t size = configFile.size();
-        std::unique_ptr<char[]> buf(new char[size]);
-        configFile.readBytes(buf.get(), size);
-
-        // Close file
-        configFile.close();
-        SPIFFS.end();
-
-        // Process the json data
-        DynamicJsonDocument jsonBuffer(2048);
-        DeserializationError error = deserializeJson(jsonBuffer, buf.get());
-        if (!error)
+        WiFiManagerParameter** customParams = wifiManager.getParameters();
+        logging::getLogStream().print("wifi: json to load: ");
+        serializeJson(jsonBuffer, logging::getLogStream());
+        logging::getLogStream().println();
+        JsonObject root = jsonBuffer.as<JsonObject>();
+        for (JsonObject::iterator it = root.begin(); it != root.end(); ++it)
         {
-          WiFiManagerParameter** customParams = wifiManager.getParameters();
-          logging::getLogStream().print("wifi: json to load: ");
-          serializeJson(jsonBuffer, logging::getLogStream());
-          logging::getLogStream().println();
-          JsonObject root = jsonBuffer.as<JsonObject>();
-          for (JsonObject::iterator it=root.begin(); it!=root.end(); ++it)
+          int idx = getIndexFromID(it->key().c_str());
+          if (idx != -1)
           {
-            int idx=getIndexFromID(it->key().c_str());
-            if (idx!=-1)
-            {
-              logging::getLogStream().printf("wifi: reading key \"%s\" and value \"%s\"\n", it->key().c_str(), it->value().as<char*>());
-              customParams[idx]->setValue(it->value().as<char*>(), customParams[idx]->getValueLength());
-            }
-            else
-              logging::getLogStream().printf("wifi: key \"%s\" with value \"%s\" not found\n", it->key().c_str(), it->value().as<char*>());
+            logging::getLogStream().printf("wifi: reading key \"%s\" and value \"%s\"\n", it->key().c_str(), it->value().as<char*>());
+            customParams[idx]->setValue(it->value().as<char*>(), customParams[idx]->getValueLength());
           }
+          else
+            logging::getLogStream().printf("wifi: key \"%s\" with value \"%s\" not found\n", it->key().c_str(), it->value().as<char*>());
         }
-        else
-          logging::getLogStream().println("wifi: failed to load json params");
       }
       else
-      {
-        SPIFFS.end();
-        logging::getLogStream().println("wifi: failed to open config.json file");
-      }
+        logging::getLogStream().println("wifi: failed to load json params");
     }
     else
     {
-      SPIFFS.end();
-      logging::getLogStream().println("wifi: no config.json file");
+      logging::getLogStream().println("wifi: failed to open config.json file");
     }
   }
   else
-    logging::getLogStream().println("wifi: failed to mounted file system");
+  {
+    logging::getLogStream().println("wifi: no config.json file");
+  }
+}
+
+void handleUpload()
+{
+  char temp[700];
+
+  snprintf ( temp, 700,
+             "<!DOCTYPE html>\
+    <html>\
+      <head>\
+        <title>ESP8266 Upload</title>\
+        <meta charset=\"utf-8\">\
+        <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+      </head>\
+      <body>\
+        <form action=\"/edit\" method=\"post\" enctype=\"multipart/form-data\">\
+          <input type=\"file\" name=\"data\">\
+          <button>Upload</button>\
+         </form>\
+      </body>\
+    </html>"
+           );
+  wifiManager.server.get()->send ( 200, "text/html", temp );
+}
+
+void handleConfigFileUpload()
+{
+  static File fsUploadFile;
+  if (wifiManager.server.get()->uri() != "/edit")
+    return;
+  HTTPUpload& upload = wifiManager.server.get()->upload();
+  if (upload.status == UPLOAD_FILE_START)
+  {
+    logging::getLogStream().printf("wifi: start uploading with the SPIFFS name \"/config.json\"\n");
+    fsUploadFile = SPIFFS.open("/config.json", "w");
+    if (!fsUploadFile)
+      logging::getLogStream().printf("wifi: failed with SPIFFS.open()\n");
+  }
+  else if (upload.status == UPLOAD_FILE_WRITE)
+  {
+    if (fsUploadFile)
+    {
+      fsUploadFile.write(upload.buf, upload.currentSize);
+      logging::getLogStream().printf("wifi: handleFileUpload data: %d\n", upload.currentSize);
+    }
+  }
+  else if (upload.status == UPLOAD_FILE_END)
+  {
+    if (fsUploadFile)
+    {
+      fsUploadFile.close();
+      logging::getLogStream().printf("wifi: handleFileUpload size: %d\n", upload.totalSize);
+      loadParams();
+      updateSystemWithWifiManagerParams();
+    }
+  }
+}
+
+void handleFileDownload()
+{
+  if (SPIFFS.exists(wifi::getWifiManager().server.get()->uri()))
+  {
+    File file = SPIFFS.open(wifi::getWifiManager().server.get()->uri(), "r");
+    if (file)
+    {
+      size_t fileSize = file.size();
+      const uint8_t bufSize = 20;
+      char buf[bufSize];
+      //now send an empty string but with the header field Content-Length to let the browser know how much data it should expect
+      wifi::getWifiManager().server.get()->setContentLength(fileSize);
+      wifi::getWifiManager().server.get()->send(200, "application/x-binary", "");
+
+      int sentSize = 0;
+      while (sentSize < fileSize)
+      {
+        uint8_t sizeToSend = bufSize;
+        if (sentSize + bufSize >= fileSize)
+          sizeToSend = fileSize - sentSize;
+
+        file.readBytes(buf, sizeToSend);
+        wifi::getWifiManager().server.get()->sendContent(buf, sizeToSend);
+
+        sentSize = sentSize + sizeToSend;
+      }
+      file.close();
+      return;
+    }
+  }
+  // In case of error log file
+  wifi::getWifiManager().server.get()->send(200, "text/plain", "No file");
 }
 
 void bindServerCallback()
@@ -262,9 +345,17 @@ void bindServerCallback()
   // This is to handle the web page for updating the firmware
   httpUpdater.setup(wifiManager.server.get(), "/update");
   // Handle for managing the log file on SPIFFS
-  wifiManager.server.get()->on("/log.txt", logging::displayFile);
-  wifiManager.server.get()->on("/config.json", logging::displayFile);
+  wifiManager.server.get()->on("/log.txt", handleFileDownload);
   wifiManager.server.get()->on("/erase_log_file", logging::eraseLogFile);
+
+  // Handle to backup and upload the configuration file
+  wifiManager.server.get()->on("/upload", handleUpload);
+  wifiManager.server.get()->on("/config.json", handleFileDownload);
+
+  // Upload file
+  // - first callback is called after the request has ended with all parsed arguments
+  // - second callback handles file upload at that location
+  wifiManager.server.get()->on("/edit", HTTP_POST, [](){ wifiManager.server.get()->send(200, "text/plain", ""); }, handleConfigFileUpload);
 }
 
 void setup()
@@ -274,7 +365,7 @@ void setup()
   // Add the custom parameters
   for (int i = 0; i < sizeof(customParamInit) / sizeof(WiFiManagerParameter); i++)
     wifiManager.addParameter(&customParamInit[i]);
-  
+
   // Load the custom parameters
   loadParams();
   updateSystemWithWifiManagerParams();
@@ -292,8 +383,8 @@ void setup()
   wifiManager.setConfigPortalBlocking(false);
 
   // SSID for the access point
-  const char* hn=getParamValueFromID("hostname");
-  if (hn!=NULL && strlen(hn)>0)
+  const char* hn = getParamValueFromID("hostname");
+  if (hn != NULL && strlen(hn) > 0)
     wifiManager.autoConnect(hn);
   else
   {
@@ -306,24 +397,24 @@ void setup()
   switches::enableBuiltinLedBlinking(switches::LED_SLOW_BLINKING);
 
   // AP mode is enabled
-  unsigned long startAPTime=millis();
-  while(WiFi.status() != WL_CONNECTED)
+  unsigned long startAPTime = millis();
+  while (WiFi.status() != WL_CONNECTED)
   {
     // Process user interaction in AP mode
     wifiManager.process();
     // This is to make the light and switch working in AP mode
     light::handle();
     switches::handle();
-    
+
     // After 1 minute in access point, reboot automatically
-    if (millis() - startAPTime > 60000) 
+    if (millis() - startAPTime > 60000)
     {
       logging::getLogStream().println("wifi: still in AP mode; reboot now");
       wifiManager.reboot();
       //ESP.restart();
     }
   }
-  
+
   //if you get here you have connected to the WiFi
   logging::getLogStream().println("wifi: connected to wifi network!");
   WiFi.mode(WIFI_STA);

@@ -15,6 +15,8 @@ namespace light
   // getter
   uint8_t &getWattage();
 
+  void mqttCallback(const char* paramID, const char* payload);
+
   void setMinBrightness(const char* str);
   void setMaxBrightness(const char* str);
   void setDimmingParameters(const char* dimmingTypeStr, const char* debounceStr);

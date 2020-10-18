@@ -35,18 +35,7 @@ void callback(const char* topic, char* msg)
   // find to which functionnality this topic is associated with
   const char* paramID = wifi::getIDFromParamValue(topic);
   if (paramID != NULL)
-  {
-    if (strcmp(paramID, "subMqttLightOn") == 0 || strcmp(paramID, "subMqttLightAllOn") == 0)
-      light::lightOn();
-    else if (strcmp(paramID, "subMqttLightOff") == 0 || strcmp(paramID, "subMqttLightAllOff") == 0)
-      light::lightOff();
-    else if (strcmp(paramID, "subMqttStartBlink") == 0)
-      light::setBlinkingDuration(1000);
-    else if (strcmp(paramID, "subMqttStartFastBlink") == 0)
-      light::setBlinkingDuration(500);
-    else if (strcmp(paramID, "subMqttStopBlink") == 0)
-      light::setBlinkingDuration(0);
-  }
+    light::mqttCallback(paramID, msg);
 }
 
 void updateParams()
@@ -112,17 +101,22 @@ void setup()
 {
 }
 
-void publishMQTT(const char *topic, const char *payload, int QoS)
+bool publishMQTT(const char *topic, const char *payload, int QoS)
 {
   if (mqttClient == NULL)
-    return;
+    return false;
   if (mqttClient->publish(topic, payload, QoS))
   {
     lastMQTTPublishTime=millis();
     logging::getLogStream().printf("mqtt: publishing with topic \"%s\" and payload \"%s\"\n", topic, payload);
+    return true;
   }
   else
+  {
+    // Ideally, the msg that failed to be published should be put into a buffer so that they can be published later
     logging::getLogStream().printf("mqtt: failed to publish with topic \"%s\" and payload \"%s\"\n", topic, payload);
+    return false;
+  }
 }
 
 
@@ -134,13 +128,7 @@ void publishMQTTOverheating(int temperature)
     return;
   char payload[8];
   sprintf(payload, "%d", temperature);
-  if (mqttClient->publish(topic, payload, 1))       // QoS set to 1
-  {
-    lastMQTTPublishTime=millis();
-    logging::getLogStream().printf("mqtt: publishing with topic \"%s\" and payload \"%s\"\n", topic, payload);
-  }
-  else
-    logging::getLogStream().printf("mqtt: failed to publish with topic \"%s\" and payload \"%s\"\n", topic, payload);
+  publishMQTT(topic, payload, 1);
 }
 
 void publishMQTTConnectingToBroker()
@@ -153,14 +141,8 @@ void publishMQTTConnectingToBroker()
     // Publish its IP address
     char payload[20];
     sprintf(payload, "%s", WiFi.localIP().toString().c_str());
-    if (mqttClient->publish(topic, payload, 1))       // QoS set to 1
-    {
-      lastMQTTPublishTime=millis();
-      logging::getLogStream().printf("mqtt: publishing with topic \"%s\" and payload \"%s\"\n", topic, payload);
-      doPublishConnectingToBroker = false;
-    }
-    else
-      logging::getLogStream().printf("mqtt: failed to publish with topic \"%s\" and payload \"%s\"\n", topic, payload);
+    if (publishMQTT(topic, payload, 1))
+      doPublishConnectingToBroker = false;    // To indicate that this has been published successfully
   }
 }
 
@@ -199,13 +181,7 @@ void publishMQTTTempAtRegularInterval()
       char payload[8];
       int temperature = switches::getTemperature();
       sprintf(payload, "%d", temperature);
-      if (mqttClient->publish(topic, payload, 0))       // QoS set to 0
-      {
-        lastMQTTPublishTime=millis();
-        logging::getLogStream().printf("mqtt: publishing with topic \"%s\" and payload \"%s\"\n", topic, payload);
-      }
-      else
-        logging::getLogStream().printf("mqtt: failed to publish with topic \"%s\" and payload \"%s\"\n", topic, payload);
+      publishMQTT(topic, payload, 0);
     }
     // Publish the message "connecting to the borker"
     publishMQTTConnectingToBroker();

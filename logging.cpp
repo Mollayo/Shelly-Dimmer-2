@@ -46,6 +46,7 @@ void LogStream::setLogOutput(const char *c)
 size_t LogStream::write(uint8_t data)
 {
   size_t tmp = 0;
+  File logFile;
   switch (logOutput)
   {
     case LogToSerial:
@@ -53,15 +54,11 @@ size_t LogStream::write(uint8_t data)
     case LogToTelnet:
       return Telnet.write(data);
     case LogToFile:
-      if (SPIFFS.begin())
+      logFile = SPIFFS.open("/log.txt", "a");
+      if (logFile)
       {
-        File logFile = SPIFFS.open("/log.txt", "a");
-        if (logFile)
-        {
-          tmp = logFile.write(data);
-          logFile.close();
-        }
-        SPIFFS.end();
+        tmp = logFile.write(data);
+        logFile.close();
       }
       return tmp;
     default:
@@ -252,57 +249,14 @@ void disableTelnet()
 }
 
 
-void displayFile()
-{
-  if (SPIFFS.begin())
-  {
-    if (SPIFFS.exists(wifi::getWifiManager().server.get()->uri()))
-    {
-      File logFile = SPIFFS.open(wifi::getWifiManager().server.get()->uri(), "r");
-      if (logFile)
-      {
-        size_t fileSize = logFile.size();
-        const uint8 bufSize = 20;
-        char buf[bufSize];
-        //now send an empty string but with the header field Content-Length to let the browser know how much data it should expect
-        wifi::getWifiManager().server.get()->setContentLength(fileSize);
-        wifi::getWifiManager().server.get()->send(200, "application/x-binary", "");
-
-        int sentSize = 0;
-        while (sentSize < fileSize)
-        {
-          uint8 sizeToSend = bufSize;
-          if (sentSize + bufSize >= fileSize)
-            sizeToSend = fileSize - sentSize;
-
-          logFile.readBytes(buf, sizeToSend);
-          wifi::getWifiManager().server.get()->sendContent(buf, sizeToSend);
-
-          sentSize = sentSize + sizeToSend;
-        }
-        logFile.close();
-        SPIFFS.end();
-        return;
-      }
-    }
-    SPIFFS.end();
-  }
-  // In case of error log file
-  wifi::getWifiManager().server.get()->send(200, "text/plane", "No file");
-}
-
 void eraseLogFile()
 {
-  if (SPIFFS.begin())
+  if (SPIFFS.exists("/log.txt"))
   {
-    if (SPIFFS.exists("/log.txt"))
-    {
-      // Erase the content of the file
-      File logFile = SPIFFS.open("/log.txt", "w");
-      if (logFile)
-        logFile.close();
-    }
-    SPIFFS.end();
+    // Erase the content of the file
+    File logFile = SPIFFS.open("/log.txt", "w");
+    if (logFile)
+      logFile.close();
   }
   // Send a redirection to the param page
   /*

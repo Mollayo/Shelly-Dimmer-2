@@ -16,6 +16,10 @@ void setup()
   // Setup serial
   Serial.begin(115200);
 
+  // Mount the SPIFFS
+  if (!SPIFFS.begin())
+    logging::getLogStream().println("Failed to mounted file system");
+
   // Setup for the switches and the light
   switches::setup();
   // Initialise the STM32 MCU
