@@ -14,7 +14,6 @@ namespace mqtt
   void handle();
 
   // Methods for publishing to MQTT
-  void publishMQTTOverheating(int temperature);
   bool publishMQTT(const char *topic, const char *payload, int QoS=1);
 }
   

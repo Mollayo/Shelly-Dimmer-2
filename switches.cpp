@@ -44,6 +44,8 @@ namespace switches {
   ESP8266Timer ITimer;      // For the builtin Leb blinking
 
   float temperature;        // Internal temperature
+  bool overheatingAlarm = false;
+  bool mqttOverheatingAlarm = false;
 
   // The switch parameters
   volatile uint8_t switchType=TOGGLE_BUTTON;
@@ -192,6 +194,7 @@ namespace switches {
           swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
           swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
       {
+        light::lightToggle();
         return BUTTON_DOUBLE_CLICK;
       }
       else if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
@@ -289,12 +292,16 @@ namespace switches {
     ITimer.attachInterruptInterval(1000 * INTERRUP_TIME, checkSwitch);
   }
 
-  void overheating()
+  void overheating(int temperature)
   {
-    logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
-    light::setBrightness(0);            // Brightness to 0
-    light::setBlinkingDuration(0);      // Stop blinking
-    mqtt::publishMQTTOverheating(temperature);
+    // If above 95, the light is switched off
+    if (temperature>95.0)
+    {
+      logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
+      light::setBrightness(0);            // Brightness to 0
+      light::setBlinkingDuration(0);      // Stop blinking
+    }
+    overheatingAlarm = true;
   }
 
   double TaylorLog(double x)
@@ -384,17 +391,36 @@ namespace switches {
     publishMQTTChangeSwitch(2);
     #endif
     
-    // Check the internal temperature every 5 seconds
+    // Check the internal temperature every 1 second
     unsigned long now=millis();
-    if(now - prevTime > 5000)
+    if(now - prevTime > 1000)
     {
         prevTime = now;
         temperature = readTemperature();
         if (temperatureLogging)
           logging::getLogStream().printf("temperature: %f\n", temperature);
         // If temperature is above 95°C, the light is switched off
-        if (temperature>95.0)
-          overheating();
+        if (temperature>80.0)
+          overheating(temperature);
+        else
+          overheatingAlarm=false;
+    }
+
+    // Publish MQTT overheating alarm
+    if (overheatingAlarm==true && mqttOverheatingAlarm==false)
+    {
+      // Publish the MQTT alarm
+      const char* topic = wifi::getParamValueFromID("pubMqttAlarmOverheat");
+      // If no topic, we do not publish
+      const char* hn = wifi::getParamValueFromID("hostname");
+      char payload[8];
+      sprintf(payload, "\"%s\" %f", hn, temperature);
+      if (mqtt::publishMQTT(topic, payload, 1))
+        mqttOverheatingAlarm=true;
+    }
+    if (overheatingAlarm==false && mqttOverheatingAlarm==true)
+    {
+      mqttOverheatingAlarm=false;
     }
   }
 

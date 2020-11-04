@@ -119,18 +119,6 @@ bool publishMQTT(const char *topic, const char *payload, int QoS)
   }
 }
 
-
-void publishMQTTOverheating(int temperature)
-{
-  const char* topic = wifi::getParamValueFromID("pubMqttOverheat");
-  // If no topic, we do not publish
-  if (mqttClient == NULL || topic == NULL)
-    return;
-  char payload[8];
-  sprintf(payload, "%d", temperature);
-  publishMQTT(topic, payload, 1);
-}
-
 void publishMQTTConnectingToBroker()
 {
   if (doPublishConnectingToBroker == false)

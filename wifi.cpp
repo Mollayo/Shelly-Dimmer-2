@@ -54,7 +54,7 @@ WiFiManagerParameter customParamInit[] = {
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT publish</h3>"),
   WiFiManagerParameter("pubMqttBrightnessLevel", "Brightness change", "light/shellyDevice", 100),
   WiFiManagerParameter("pubMqttSwitchEvents", "Switch events", "switch/shellyDevice", 100),
-  WiFiManagerParameter("pubMqttOverheat", "Overheat alarm", "overheat/shellyDevice", 100),
+  WiFiManagerParameter("pubMqttAlarmOverheat", "Overheat alarm", "shellyDevice/alarm/overheat", 100),
   WiFiManagerParameter("pubMqttTemperature", "Internal temperature", "temperature/shellyDevice", 100),
   WiFiManagerParameter("pubMqttConnecting", "Connecting to the broker", "connecting/shellyDevice", 100),
 
