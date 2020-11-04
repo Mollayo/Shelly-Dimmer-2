@@ -105,7 +105,7 @@ void processReceivedPacket(uint8_t payload_cmd, uint8_t* payload, uint8_t payloa
   {
     logging::getLogStream().printf("- STM Firmware version: %s\n", helpers::hexToStr(payload, payload_size));
     if (payload[0] != 0x35 || payload[1] != 0x02)
-      logging::getLogStream().printf("- STM Firmware should be: 0x%02X,0x%02X\n", 0x35, 0x02);
+      logging::getLogStream().printf("- STM Firmware is 0x%02X,0x%02X. It should be 0x35,0x02\n", payload[0], payload[1]);
 
   }
   // Command for getting the state (brigthness level, wattage, etc)
