@@ -7,4 +7,4 @@ This is a firmware for the Shelly Dimmer 2 (see https://shelly.cloud/knowledge-b
 - Adafruit MQTT Library 1.3.0: https://github.com/adafruit/Adafruit_MQTT_Library
 - Arduino IDE 1.8.3
 
-Before installing this firmware, the Shelly stock firmware (20200904-094614/v1.8.4@699b08ac) has to be installed on the device and the device should run once so that the correct version of the STM32 firmware is installed.
+Before installing this firmware, the Shelly stock firmware (20200904-094614/v1.8.4@699b08ac https://github.com/Mollayo/Shelly-Dimmer-2-Reverse-Engineering/blob/master/shelly%20stock%20firmware/shelly_dimmer_2%2020200904-094614%20v1.8.4%40699b08ac.bin) has to be installed on the device and the device should run once so that the correct version of the STM32 firmware is installed.
