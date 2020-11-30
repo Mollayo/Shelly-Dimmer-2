@@ -38,9 +38,6 @@ void LogStream::setLogOutput(const char *c)
     else
       logOutput = LogDisabled;
   }
-  else
-    // Default option
-    logOutput = LogDisabled;
 }
 
 size_t LogStream::write(uint8_t data)

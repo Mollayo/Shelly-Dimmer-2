@@ -412,11 +412,17 @@ namespace switches {
       // Publish the MQTT alarm
       const char* topic = wifi::getParamValueFromID("pubMqttAlarmOverheat");
       // If no topic, we do not publish
-      const char* hn = wifi::getParamValueFromID("hostname");
-      char payload[8];
-      sprintf(payload, "\"%s\" %f", hn, temperature);
-      if (mqtt::publishMQTT(topic, payload, 1))
-        mqttOverheatingAlarm=true;
+      if (topic!=NULL)
+      {
+        const char* hn = wifi::getParamValueFromID("hostname");
+        char payload[8];
+        if (hn!=NULL)
+          sprintf(payload, "\"%s\" %f", hn, temperature);
+        else
+          sprintf(payload, "%f", temperature);        
+        if (mqtt::publishMQTT(topic, payload, 1))
+          mqttOverheatingAlarm=true;
+      }
     }
     if (overheatingAlarm==false && mqttOverheatingAlarm==true)
     {
