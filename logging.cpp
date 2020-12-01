@@ -200,7 +200,7 @@ void handle()
     else if (telnetCmd[0] == 't' && telnetCmd[1] == 'e'&& telnetCmd[2] == 'm' && telnetCmd[3] == 'p' && telnetCmd[4] == 0x0D)
       switches::getTemperatureLogging()=!switches::getTemperatureLogging();
     else if (telnetCmd[0] == 'r' && telnetCmd[1] == 'e' && telnetCmd[2] == 's' && telnetCmd[3] == 0x0D)
-      light::resetSTM32();
+      light::STM32reset();
     else if (telnetCmd[0] == 'b' && telnetCmd[1] == 'l' && telnetCmd[6] == 0x0D)
     {
       uint16_t v = (telnetCmd[2] - '0') * 1000 + (telnetCmd[3] - '0') * 100 + (telnetCmd[4] - '0') * 10 + (telnetCmd[5] - '0');

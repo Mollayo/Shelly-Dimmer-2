@@ -297,7 +297,7 @@ namespace switches {
     // If above 95, the light is switched off
     if (temperature>95.0)
     {
-      logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
+      //logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
       light::setBrightness(0);            // Brightness to 0
       light::setBlinkingDuration(0);      // Stop blinking
     }

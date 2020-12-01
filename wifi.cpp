@@ -22,16 +22,21 @@ WiFiManager &getWifiManager() {
 
 const char version[] = "Build Date & Time: " __DATE__ ", " __TIME__;
 
-// Custom parameters for the MQTT
-WiFiManagerParameter customParamInit[] = {
+// Parameters for the firmware and configuration file
+WiFiManagerParameter customParamFirmware[] = 
+{
   // Button for the firmware update
   WiFiManagerParameter("</form>"),
   WiFiManagerParameter(version),
   WiFiManagerParameter("<form action=\"/update\"><input type=\"submit\" value=\"Update firmware\"></form>"),
   WiFiManagerParameter("<form action=\"/config.json\"><input type=\"submit\" value=\"Download the configuration file\"></form>"),
-  WiFiManagerParameter("<form action=\"/upload\"><input type=\"submit\" value=\"Upload the configuration file\"></form>"),
+  WiFiManagerParameter("<form action=\"/upload\"><input type=\"submit\" value=\"Upload the configuration file\"></form>")
+};
+  
+// The switch parameters
+WiFiManagerParameter customParam[] = 
+{
   WiFiManagerParameter("<form action=\"/paramsave\">"),
-  // The switch parameters
   WiFiManagerParameter("<br/><br/><hr><h3>Switch parameters</h3>"),
   WiFiManagerParameter("hostname", "Hostname and access point name (require reboot)", "", 30),
   WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "2", 1),
@@ -70,7 +75,7 @@ WiFiManagerParameter customParamInit[] = {
 
   // The debugging options
   WiFiManagerParameter("<br/><br/><hr><h3>Debugging options</h3>"),
-  WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to a file)", "1", 1),
+  WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to the log file)", "1", 1),
   WiFiManagerParameter("<a href=\"/log.txt\">Open_the_log_file</a>&emsp;<a href=\"/erase_log_file\">Erase_the_log_file</a><br/><br/>"),
 };
 
@@ -263,7 +268,7 @@ void handleUpload()
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
       </head>\
       <body>\
-        <form action=\"/edit\" method=\"post\" enctype=\"multipart/form-data\">\
+        <form action=\"/doUpload\" method=\"post\" enctype=\"multipart/form-data\">\
           <input type=\"file\" name=\"data\">\
           <button>Upload</button>\
          </form>\
@@ -276,7 +281,7 @@ void handleUpload()
 void handleConfigFileUpload()
 {
   static File fsUploadFile;
-  if (wifiManager.server.get()->uri() != "/edit")
+  if (wifiManager.server.get()->uri() != "/doUpload")
     return;
   HTTPUpload& upload = wifiManager.server.get()->upload();
   if (upload.status == UPLOAD_FILE_START)
@@ -348,14 +353,18 @@ void bindServerCallback()
   wifiManager.server.get()->on("/log.txt", handleFileDownload);
   wifiManager.server.get()->on("/erase_log_file", logging::eraseLogFile);
 
-  // Handle to backup and upload the configuration file
-  wifiManager.server.get()->on("/upload", handleUpload);
+  // Handle to backup the configuration file
   wifiManager.server.get()->on("/config.json", handleFileDownload);
-
+  
+  // Handle to upload the configuration file
+  wifiManager.server.get()->on("/upload", handleUpload);
   // Upload file
   // - first callback is called after the request has ended with all parsed arguments
   // - second callback handles file upload at that location
-  wifiManager.server.get()->on("/edit", HTTP_POST, [](){ wifiManager.server.get()->send(200, "text/plain", ""); }, handleConfigFileUpload);
+  wifiManager.server.get()->on("/doUpload", HTTP_POST, [](){ wifiManager.server.get()->send(200, "text/plain", ""); }, handleConfigFileUpload);
+
+  // callbacks for updating the STM32 firmware
+  light::bindServerCallback();  
 }
 
 void setup()
@@ -363,8 +372,12 @@ void setup()
   //wifiManager.resetSettings();              // Reset the wifi settings for debugging
 
   // Add the custom parameters
-  for (int i = 0; i < sizeof(customParamInit) / sizeof(WiFiManagerParameter); i++)
-    wifiManager.addParameter(&customParamInit[i]);
+  for (int i = 0; i < sizeof(customParamFirmware) / sizeof(WiFiManagerParameter); i++)
+    wifiManager.addParameter(&customParamFirmware[i]);
+  light::addWifiManagerParameters();
+  
+  for (int i = 0; i < sizeof(customParam) / sizeof(WiFiManagerParameter); i++)
+    wifiManager.addParameter(&customParam[i]);
 
   // Load the custom parameters
   loadParams();
