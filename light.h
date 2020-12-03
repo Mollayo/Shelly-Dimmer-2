@@ -36,12 +36,9 @@ namespace light
   void handle();
   void updateParams();
 
-  // For the firmware flashing
-  void addWifiManagerParameters();
+  void addWifiManagerCustomButtons();
+  void addWifiManagerCustomParams();
   void bindServerCallback();
-  bool STM32FlashBegin();
-  void STM32FlashEnd();
-  bool STM32FlashUpload(const uint8_t data[], unsigned int size);
 
 } // namespace dimmer
 

@@ -34,12 +34,22 @@ uint8_t &getWattage() {
   return wattage;
 }
 
-WiFiManagerParameter customParamFirmware[] = 
+WiFiManagerParameter wifiManagerCustomButtons[] = 
 {
   // Button for the firmware update
-  WiFiManagerParameter("<form action=\"/uploadSTM32Firmware\"><input type=\"submit\" value=\"Update the STM32 firmware\"></form>"),
+  WiFiManagerParameter("<form action=\"/uploadSTM32Firmware\"><input type=\"submit\" value=\"Update the STM32 Firmware\"></form>"),
 };
 
+// The dimmer parameters
+WiFiManagerParameter wifiManagerCustomParams[] = 
+{
+  WiFiManagerParameter("<br/><br/><hr><h3>Light parameters</h3>"),
+  WiFiManagerParameter("minBrightness", "Minimum brightness (0% to 20%)", "0", 3),
+  WiFiManagerParameter("maxBrightness", "Maximum brightness (0% to 100%)", "50", 3),
+  WiFiManagerParameter("autoOffTimer", "Auto-off timer (value in seconds)", "", 3),
+  WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge (LED), 1: leading edge (halogen))", "0", 1),
+  WiFiManagerParameter("flickerDebounce", "Anti-flickering debounce (50 - 150)", "100", 3),
+};
 
 const uint8_t CMD_SET_BRIGHTNESS = 0x02;
 const uint8_t CMD_SET_BRIGHTNESS_ADVANCED = 0x03;
@@ -147,7 +157,7 @@ bool STM32FlashBegin()
   Serial.begin(115200, SERIAL_8E1);
   STM32ResetToDFUMode();
   
-  logging::getLogStream().println("light: start updatin firmware for the STM32");
+  logging::getLogStream().println("light: start updating firmware for the STM32");
 
   stm32 = stm32_init(&Serial, STREAM_SERIAL, 1);
   stm32Addr = 0;
@@ -561,10 +571,6 @@ void updateParams()
   setDimmingParameters(wifi::getParamValueFromID("dimmingType"), wifi::getParamValueFromID("flickerDebounce"));
 }
 
-void addWifiManagerParameters()
-{
-  wifi::getWifiManager().addParameter(customParamFirmware);
-}
   
 void handleUploadSTM32Firmware()
 {
@@ -574,7 +580,7 @@ void handleUploadSTM32Firmware()
              "<!DOCTYPE html>\
               <html>\
                 <head>\
-                  <title>STM32 Firmware updat</title>\
+                  <title>STM32 Firmware update</title>\
                   <meta charset=\"utf-8\">\
                   <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\
                   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
@@ -582,7 +588,7 @@ void handleUploadSTM32Firmware()
                 <body>\
                   <form action=\"/doUploadSTM32Firmware\" method=\"post\" enctype=\"multipart/form-data\">\
                     <input type=\"file\" name=\"data\">\
-                    <button>Upload</button>\
+                    <button>Update STM32 Firmware</button>\
                    </form>\
                 </body>\
               </html>");
@@ -609,6 +615,18 @@ void handleDoUploadSTM32Firmware()
     STM32FlashEnd();
   }
 
+}
+
+void addWifiManagerCustomButtons()
+{
+  for (int i = 0; i < sizeof(wifiManagerCustomButtons) / sizeof(WiFiManagerParameter); i++)
+    wifi::getWifiManager().addParameter(&wifiManagerCustomButtons[i]);
+}
+
+void addWifiManagerCustomParams()
+{
+  for (int i = 0; i < sizeof(wifiManagerCustomParams) / sizeof(WiFiManagerParameter); i++)
+    wifi::getWifiManager().addParameter(&wifiManagerCustomParams[i]);
 }
 
 // HTTP callback for updating the STM32 firmware

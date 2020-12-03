@@ -297,7 +297,7 @@ namespace switches {
     // If above 95, the light is switched off
     if (temperature>95.0)
     {
-      //logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
+      logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
       light::setBrightness(0);            // Brightness to 0
       light::setBlinkingDuration(0);      // Stop blinking
     }
@@ -369,9 +369,9 @@ namespace switches {
       {
         char payload[50];
         if (light::lightIsOn())
-          sprintf(payload,"%s LIGHT_ON",BUTTON_STATE_STR[getSwState(switchID)]);
+          sprintf(payload,"%s LIGHT_ON %d",BUTTON_STATE_STR[getSwState(switchID)], switchID);
         else
-          sprintf(payload,"%s LIGHT_OFF",BUTTON_STATE_STR[getSwState(switchID)]);
+          sprintf(payload,"%s LIGHT_OFF %d",BUTTON_STATE_STR[getSwState(switchID)], switchID);
         if (mqtt::publishMQTT(topic,payload))
           getSwState(switchID)=ALREADY_PUBLISHED;
       }

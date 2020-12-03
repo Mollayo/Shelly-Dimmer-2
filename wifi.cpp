@@ -23,7 +23,7 @@ WiFiManager &getWifiManager() {
 const char version[] = "Build Date & Time: " __DATE__ ", " __TIME__;
 
 // Parameters for the firmware and configuration file
-WiFiManagerParameter customParamFirmware[] = 
+WiFiManagerParameter customButtons[] = 
 {
   // Button for the firmware update
   WiFiManagerParameter("</form>"),
@@ -34,23 +34,20 @@ WiFiManagerParameter customParamFirmware[] =
 };
   
 // The switch parameters
-WiFiManagerParameter customParam[] = 
+WiFiManagerParameter switchParams[] = 
 {
   WiFiManagerParameter("<form action=\"/paramsave\">"),
   WiFiManagerParameter("<br/><br/><hr><h3>Switch parameters</h3>"),
   WiFiManagerParameter("hostname", "Hostname and access point name (require reboot)", "", 30),
   WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "2", 1),
   WiFiManagerParameter("defaultReleaseState", "Default release state (0: open, 1: close)", "0", 1),
-
-  // The dimmer parameters
-  WiFiManagerParameter("<br/><br/><hr><h3>Light parameters</h3>"),
-  WiFiManagerParameter("minBrightness", "Minimum brightness (0% to 20%)", "0", 3),
-  WiFiManagerParameter("maxBrightness", "Maximum brightness (0% to 100%)", "50", 3),
   WiFiManagerParameter("autoOffTimer", "Auto-off timer (value in seconds)", "", 3),
-  WiFiManagerParameter("dimmingType", "Dimming type (0: trailing edge (LED), 1: leading edge (halogen))", "0", 1),
-  WiFiManagerParameter("flickerDebounce", "Anti-flickering debounce (50 - 150)", "100", 3),
+};
 
-  // The MQTT server parameters
+// The MQTT server parameters
+WiFiManagerParameter MQTTParams[] = 
+{
+  // The broker parameters
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT server</h3>"),
   WiFiManagerParameter("mqttServer", "IP of the broker", "", 40),
   WiFiManagerParameter("mqttPort", "Port", "1883", 6),
@@ -72,8 +69,11 @@ WiFiManagerParameter customParam[] =
   WiFiManagerParameter("subMqttStartBlink", "Topic for starting blinking", "startBlink/shellyDevice", 100),
   WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blinking", "startFastBlink/shellyDevice", 100),
   WiFiManagerParameter("subMqttStopBlink", "Topic for stopping blinking", "stopBlink/shellyDevice", 100),
+};
 
-  // The debugging options
+// The debugging options
+WiFiManagerParameter debugParams[] = 
+{
   WiFiManagerParameter("<br/><br/><hr><h3>Debugging options</h3>"),
   WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to the log file)", "1", 1),
   WiFiManagerParameter("<a href=\"/log.txt\">Open_the_log_file</a>&emsp;<a href=\"/erase_log_file\">Erase_the_log_file</a><br/><br/>"),
@@ -372,12 +372,20 @@ void setup()
   //wifiManager.resetSettings();              // Reset the wifi settings for debugging
 
   // Add the custom parameters
-  for (int i = 0; i < sizeof(customParamFirmware) / sizeof(WiFiManagerParameter); i++)
-    wifiManager.addParameter(&customParamFirmware[i]);
-  light::addWifiManagerParameters();
+  for (int i = 0; i < sizeof(customButtons) / sizeof(WiFiManagerParameter); i++)
+    wifiManager.addParameter(&customButtons[i]);
+  light::addWifiManagerCustomButtons();
   
-  for (int i = 0; i < sizeof(customParam) / sizeof(WiFiManagerParameter); i++)
-    wifiManager.addParameter(&customParam[i]);
+  for (int i = 0; i < sizeof(switchParams) / sizeof(WiFiManagerParameter); i++)
+    wifiManager.addParameter(&switchParams[i]);
+
+  light::addWifiManagerCustomParams();
+
+  for (int i = 0; i < sizeof(MQTTParams) / sizeof(WiFiManagerParameter); i++)
+    wifiManager.addParameter(&MQTTParams[i]);
+
+  for (int i = 0; i < sizeof(debugParams) / sizeof(WiFiManagerParameter); i++)
+    wifiManager.addParameter(&debugParams[i]);
 
   // Load the custom parameters
   loadParams();
