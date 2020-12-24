@@ -85,6 +85,15 @@ void handle()
 {
   // Handle for the config portal
   wifiManager.process();
+
+  // Update the built-in led to show the wifi connection status
+  // Try to reconnect every minute if not connected
+  unsigned long now = millis();
+  if(WiFi.status() != WL_CONNECTED)
+    // builtin led slowly blinking when not connected to the wifi
+    switches::enableBuiltinLedBlinking(switches::LED_SLOW_BLINKING);
+  else
+    switches::enableBuiltinLedBlinking(switches::LED_ON);
 }
 
 // Convert param ID to param value

@@ -14,11 +14,12 @@ namespace switches {
   #define TOGGLE_BUTTON 2
   #define PUSH_BUTTON   1
   
-  // The possible states for the switches
+  // The possible states for the switches for TOGGLE_BUTTON
   #define BUTTON_OFF                  0
   #define BUTTON_ON                   1
   #define BUTTON_OFF_ON_OFF           2
   #define BUTTON_ON_OFF_ON            3
+  // The possible states for the switches for PUSH_BUTTON
   #define BUTTON_SHORT_CLICK          4
   #define BUTTON_LONG_CLICK           5
   #define BUTTON_DOUBLE_CLICK         6
@@ -60,8 +61,10 @@ namespace switches {
   unsigned long prevTime = millis();
 
   // For the LED switching
+  volatile uint8_t ledBlinkingMode=LED_UNKNOWN;
   volatile uint8_t ledBlinkDuration=0;
   volatile uint8_t ledBlinkTickCounter=0;
+  unsigned long ledOnTime=0;
 
 
   // For computing the current state for the switch 
@@ -87,7 +90,12 @@ namespace switches {
 
   void enableBuiltinLedBlinking(uint8_t ledMode)
   {
+    // If the new mode has been already set, nothing to be done
+    if (ledBlinkingMode==ledMode)
+      return;
     ledBlinkTickCounter=0;
+    ledBlinkingMode=ledMode;
+    ledOnTime=0;
     pinMode(SHELLY_BUILTIN_LED, OUTPUT);
     switch(ledMode)
     {
@@ -104,6 +112,7 @@ namespace switches {
       case LED_ON:
       ledBlinkDuration=0;         // No blinking
       digitalWrite(SHELLY_BUILTIN_LED, LOW);
+      ledOnTime=millis();         // Save the time when the led is switched on
       break;
     }
   }
@@ -427,6 +436,13 @@ namespace switches {
     if (overheatingAlarm==false && mqttOverheatingAlarm==true)
     {
       mqttOverheatingAlarm=false;
+    }
+    // Switch off the builtin led if its mode is on after one minute
+    if ((ledOnTime!=0) && (ledBlinkingMode==LED_ON) && (now-ledOnTime>60000))
+    {
+      // Switch of the builtin led after one minute
+      ledOnTime=0;
+      digitalWrite(SHELLY_BUILTIN_LED, HIGH);
     }
   }
 

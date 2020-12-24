@@ -9,7 +9,7 @@
 
 namespace switches {
 
-  enum { LED_OFF, LED_FAST_BLINKING, LED_SLOW_BLINKING, LED_ON };
+  enum { LED_UNKNOWN, LED_OFF, LED_FAST_BLINKING, LED_SLOW_BLINKING, LED_ON };
 
   // For the built-in led blinking
   void enableBuiltinLedBlinking(uint8_t ledMode);
