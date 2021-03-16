@@ -25,9 +25,15 @@ uint16_t autoOffDuration = 0;         // In seconds
 unsigned long lastLightOnTime = 0;
 
 // For blinking
-unsigned long lastBlinkingTime = 0;
-uint16_t blinkingDuration = 0;   // in ms; if 0, no blinking
+unsigned long startBlinkingTime = 0;
+uint16_t blinkingTimerDuration = 5;  // In seconds
+bool blinking = false;
+
+// For the blinking pattern
+unsigned long lastBlinkingLightStateTime = 0;
 bool blinkingLightState = false;
+uint16_t blinkingPattern[10] = {500, 500, 0, 0, 0, 0, 0, 0, 0, 0};   // in ms; if 0, no blinking
+
 
 
 uint8_t &getWattage() {
@@ -37,7 +43,7 @@ uint8_t &getWattage() {
 WiFiManagerParameter wifiManagerCustomButtons[] = 
 {
   // Button for the firmware update
-  WiFiManagerParameter("<form action=\"/uploadSTM32Firmware\"><input type=\"submit\" value=\"Update the STM32 Firmware\"></form>"),
+  WiFiManagerParameter("<form action=\"/uploadSTM32Firmware\"><input type=\"submit\" value=\"Update the STM32 firmware\"></form>"),
 };
 
 // The dimmer parameters
@@ -403,6 +409,100 @@ void sendCmdSetDimmingParameters(uint8_t dimmingType, uint8_t debounce)
   receivePacket();
 }
 
+void setBlinkingDuration(const char* durationStr)
+{
+  uint16_t newDuration=5;
+  if (helpers::convertToInteger(durationStr, newDuration))
+  {
+    if (blinkingTimerDuration != newDuration)
+    {
+      logging::getLogStream().printf("light: change blinking duration to %d\n", newDuration);
+      blinkingTimerDuration = newDuration;
+    }
+  }
+  else
+  {
+    logging::getLogStream().printf("light: failed to change blinking duration to %s\n", durationStr);
+    blinkingTimerDuration = 5;
+  }
+
+}
+
+void startBlinking()
+{
+  logging::getLogStream().printf("light: start blinking\n");
+  // start blinking
+  blinkingLightState = false;              // light should be switched on
+  lastBlinkingLightStateTime = millis();   // reset blinking timer
+  startBlinkingTime = millis();            // Save the stating time of blinking
+  blinking = true;
+}
+
+void stopBlinking()
+{
+  logging::getLogStream().printf("light: stop blinking\n");
+  // stopping blinking
+  // Comme back to the initial brightness level
+  sendCmdSetBrightness(brightness);
+  blinking = false;
+}
+
+void setBlinkingPattern(const char *payload)
+{
+  // payload should contain a sequence of int for the pattern of the blink (duration in ms for the light on, light off, etc)
+  uint8_t nbPattern = 0;
+  if (payload!=nullptr)
+  {
+    logging::getLogStream().printf("light: setting pattern to %s\n",payload);
+    uint16_t strl = strlen(payload);
+    memset(blinkingPattern, 0x00, sizeof(blinkingPattern));
+    int i=0, j=0;
+    char temp[10];
+    memset(temp,0x00,sizeof(temp));
+    for (i = 0; i <= strl; i++)
+    {
+      if (i == strl || payload[i]<'0' || payload[i]>'9')
+      {
+        if (helpers::isInteger(temp, sizeof(temp) - 1))
+        {
+          if (nbPattern < 10)
+          {
+            blinkingPattern[nbPattern] = atoi(temp)*100;
+            logging::getLogStream().printf("light: adding pattern %d\n",blinkingPattern[nbPattern]);
+            if (blinkingPattern[nbPattern]<200)
+            {
+              logging::getLogStream().printf("light: pattern duration to short. Set to 200\n");
+              blinkingPattern[nbPattern]=200;
+            }
+            nbPattern++;
+          }
+        }
+        j = 0;
+        memset(temp,0x00,sizeof(temp));
+      }
+      else
+      {
+        if (j < sizeof(temp) - 1)
+        {
+          temp[j] = payload[i];
+          j++;
+        }
+      }
+    }
+    logging::getLogStream().printf("light: new blinking pattern %d %d %d %d %d %d %d %d %d %d\n",
+                                    blinkingPattern[0],blinkingPattern[1],blinkingPattern[2],blinkingPattern[3],blinkingPattern[4],
+                                    blinkingPattern[5],blinkingPattern[6],blinkingPattern[7],blinkingPattern[8],blinkingPattern[9]);
+  }
+  if (nbPattern<2)
+  {
+    // If the blinking pattern is malformed (i.e. sequence smaller than 2)
+    logging::getLogStream().printf("light: blinking pattern to short or not defined. Set back to default value\n");
+    memset(blinkingPattern,0x00,sizeof(blinkingPattern));
+    blinkingPattern[0]=500;
+    blinkingPattern[1]=500;
+  }
+}
+
 void mqttCallback(const char* paramID, const char* payload)
 {
   if (strcmp(paramID, "subMqttLightOn") == 0 || strcmp(paramID, "subMqttLightAllOn") == 0)
@@ -413,12 +513,16 @@ void mqttCallback(const char* paramID, const char* payload)
   }
   else if (strcmp(paramID, "subMqttLightOff") == 0 || strcmp(paramID, "subMqttLightAllOff") == 0)
     lightOff();
-  else if (strcmp(paramID, "subMqttStartBlink") == 0)
-    setBlinkingDuration(1000);
-  else if (strcmp(paramID, "subMqttStartFastBlink") == 0)
-    setBlinkingDuration(500);
-  else if (strcmp(paramID, "subMqttStopBlink") == 0)
-    setBlinkingDuration(0);
+  else if (strcmp(paramID, "subMqttBlinkingPattern") == 0)
+  {
+    setBlinkingPattern(payload);
+    // Start blinking with the new pattern
+    startBlinking();
+  }
+  else if (strcmp(paramID, "subMqttBlinkingDuration") == 0)
+  {
+    setBlinkingDuration(payload);
+  }
 }
 
 void sendCmdGetVersion()
@@ -493,7 +597,6 @@ void setAutoOffTimer(const char* str)
     autoOffDuration = 0;
     return;
   }
-
   autoOffDuration = atoi (str);
 }
 
@@ -517,8 +620,8 @@ void lightOff()
 
 ICACHE_RAM_ATTR void lightToggle()
 {
-  // Current brighness closer to minBrightness than maxBrighness
-  if ((brightness - minBrightness) < (maxBrightness - brightness))
+  // If brighness different from minBrightness
+  if (brightness == minBrightness)
   {
     sendCmdSetBrightness(maxBrightness);
     brightness = maxBrightness;
@@ -535,27 +638,6 @@ ICACHE_RAM_ATTR bool lightIsOn()
   return brightness > minBrightness;
 }
 
-void setBlinkingDuration(uint16_t duration)
-{
-  if (blinkingDuration != duration)
-  {
-    logging::getLogStream().printf("light: change blinking duration to %d\n", duration);
-    blinkingDuration = duration;
-    if (duration == 0)
-    {
-      // stopping blinking
-      // Comme back to the initial brightness level
-      sendCmdSetBrightness(brightness);
-    }
-    else
-    {
-      // start blinking
-      blinkingLightState = true;  // start with light on
-      lastBlinkingTime = 0;       // reset blinking timer
-    }
-  }
-}
-
 void setup()
 {
   STM32reset();
@@ -567,8 +649,6 @@ void updateParams()
   setMinBrightness(wifi::getParamValueFromID("minBrightness"));
   setMaxBrightness(wifi::getParamValueFromID("maxBrightness"));
   setAutoOffTimer(wifi::getParamValueFromID("autoOffTimer"));
-
-  setDimmingParameters(wifi::getParamValueFromID("dimmingType"), wifi::getParamValueFromID("flickerDebounce"));
 }
 
   
@@ -639,7 +719,7 @@ void bindServerCallback()
   // - second callback handles file upload at that location
   wifi::getWifiManager().server.get()->on("/doUploadSTM32Firmware", HTTP_POST, [](){ wifi::getWifiManager().server.get()->send(200, "text/plain", ""); }, handleDoUploadSTM32Firmware);
 }
- 
+
 void handle()
 {
   unsigned long currTime;
@@ -663,25 +743,53 @@ void handle()
     }
   }
 
-  // For blinking,  blinkingDuration==0 -> no blinking
-  if (blinkingDuration > 0)
+  // For blinking
+  if (blinking)
   {
     currTime = millis();
-    if (currTime - lastBlinkingTime > blinkingDuration)
+
+    // Check if the blinking has to be stopped
+    if (currTime - startBlinkingTime > blinkingTimerDuration*1000)
+      stopBlinking();
+
+    // Alternate on/off for the blinking
+    if (blinking)
     {
-      lastBlinkingTime = currTime;
-      // alternate on/off
-      if (blinkingLightState)
+      // Using the pattern, find the new light state
+      long diff = currTime - lastBlinkingLightStateTime;
+      uint8_t pc = 0;
+      unsigned long sum = 0;
+      while (diff > sum)
       {
-        logging::getLogStream().printf("light: light on for blinking\n");
-        sendCmdSetBrightness(maxBrightness);
+        // If at the end of the pattern, we come back
+        if (pc == 10)
+        {
+          lastBlinkingLightStateTime = lastBlinkingLightStateTime + sum;
+          diff = currTime - lastBlinkingLightStateTime;
+          logging::getLogStream().printf("light: loop over the pattern\n");
+          pc = 0;
+          sum = 0;
+        }
+        sum += blinkingPattern[pc];
+        pc++;
       }
-      else
+      
+      bool newBlinkingLightState = ((pc-1)%2==0);
+      if (blinkingLightState != newBlinkingLightState)
       {
-        logging::getLogStream().printf("light: light off for blinking\n");
-        sendCmdSetBrightness(minBrightness);
+        blinkingLightState = newBlinkingLightState;
+        // alternate on/off
+        if (blinkingLightState)
+        {
+          logging::getLogStream().printf("light: light on for blinking\n");
+          sendCmdSetBrightness(maxBrightness);
+        }
+        else
+        {
+          logging::getLogStream().printf("light: light off for blinking\n");
+          sendCmdSetBrightness(minBrightness);
+        }
       }
-      blinkingLightState = !blinkingLightState;
     }
   }
 

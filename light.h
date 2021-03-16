@@ -31,7 +31,10 @@ namespace light
 
   void sendCmdGetVersion();
   void sendCmdGetState();
-  void setBlinkingDuration(uint16_t duration);    // in ms, duration==0 means no blinking
+  void setBlinkingDuration(const char* durationStr);
+  void setBlinkingPattern(const char *payload);
+  void startBlinking();
+  void stopBlinking();
   void setup();
   void handle();
   void updateParams();

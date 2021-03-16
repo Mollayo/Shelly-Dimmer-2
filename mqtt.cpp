@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #include "config.h"
 #include "wifi.h"
 #include "logging.h"

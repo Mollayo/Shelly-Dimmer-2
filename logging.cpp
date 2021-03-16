@@ -129,13 +129,14 @@ char* readTelnetCmd()
     }
   }
 
-  const uint8_t MAXBUFFERSIZE = 30;
+  const uint8_t MAXBUFFERSIZE = 40;
   if (Telnet && Telnet.connected() && Telnet.available())
   {
     char c;
     uint8_t charsReceived = 0;
     if (telnetCmd == NULL)
       telnetCmd = (char*)calloc(sizeof(char), MAXBUFFERSIZE);
+    memset(telnetCmd,0x00,sizeof(char)*MAXBUFFERSIZE);
 
     // copy waiting characters into textBuff
     //until textBuff full, CR received, or no more characters
@@ -170,7 +171,10 @@ void printTelnetMenu()
     Telnet.println(" br000 to br100 : set the brightness between 0% and 100%");
     Telnet.println(" on or off : switch on/off the light");
     Telnet.println(" temp : enable/disable temperature logging");
-    Telnet.println(" bl0000 to bl9999 : set blinking duration");
+    Telnet.println(" blpt xxx xxx xxx : set blinking pattern");
+    Telnet.println(" sab : start blinking");
+    Telnet.println(" sob : stop blinking");
+    Telnet.println(" bldu : set the blinking duration");
   }
 }
 
@@ -201,16 +205,16 @@ void handle()
       switches::getTemperatureLogging()=!switches::getTemperatureLogging();
     else if (telnetCmd[0] == 'r' && telnetCmd[1] == 'e' && telnetCmd[2] == 's' && telnetCmd[3] == 0x0D)
       light::STM32reset();
-    else if (telnetCmd[0] == 'b' && telnetCmd[1] == 'l' && telnetCmd[6] == 0x0D)
-    {
-      uint16_t v = (telnetCmd[2] - '0') * 1000 + (telnetCmd[3] - '0') * 100 + (telnetCmd[4] - '0') * 10 + (telnetCmd[5] - '0');
-      if (v >= 0 && v <= 1000)
-        light::setBlinkingDuration(v);
-      else
-        logging::getLogStream().printf("wrong value for the blink duration: %d\n", v);
-    }
+    else if (telnetCmd[0] == 's' && telnetCmd[1] == 'a' && telnetCmd[2] == 'b' && telnetCmd[3] == 0x0D)
+      light::startBlinking();
+    else if (telnetCmd[0] == 's' && telnetCmd[1] == 'o' && telnetCmd[2] == 'b' && telnetCmd[3] == 0x0D)
+      light::stopBlinking();
+    else if (telnetCmd[0] == 'b' && telnetCmd[1] == 'l' && telnetCmd[2] == 'p' && telnetCmd[3] == 't' && telnetCmd[4] == ' ')
+      light::setBlinkingPattern(telnetCmd+5);
+    else if (telnetCmd[0] == 'b' && telnetCmd[1] == 'l' && telnetCmd[2] == 'd' && telnetCmd[3] == 'u' && telnetCmd[4] == ' ')
+      light::setBlinkingDuration(telnetCmd+5);
     else
-      // Command not recognized, we print the menu options
+      // Command not recognized command, we print the menu options
       printTelnetMenu();
   }
 }

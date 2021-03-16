@@ -308,7 +308,7 @@ namespace switches {
     {
       logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
       light::setBrightness(0);            // Brightness to 0
-      light::setBlinkingDuration(0);      // Stop blinking
+      light::stopBlinking();      // Stop blinking
     }
     overheatingAlarm = true;
   }
@@ -336,6 +336,7 @@ namespace switches {
     
   float readTemperature()
   {
+    // Should not use analogread to often otherwise the wifi stops working
     // Range: 387 (cold) to 226 (hot)
     int adc = analogRead(TEMPERATURE_SENSOR);
     
@@ -405,13 +406,14 @@ namespace switches {
     if(now - prevTime > 1000)
     {
         prevTime = now;
+        // Should not use analogread to often otherwise the wifi stops working
         temperature = readTemperature();
         if (temperatureLogging)
           logging::getLogStream().printf("temperature: %f\n", temperature);
         // If temperature is above 95°C, the light is switched off
         if (temperature>80.0)
           overheating(temperature);
-        else
+        else if (temperature<75.0)    // To avoid sending multiple messages
           overheatingAlarm=false;
     }
 

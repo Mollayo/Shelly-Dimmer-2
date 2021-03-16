@@ -66,15 +66,16 @@ WiFiManagerParameter MQTTParams[] =
   WiFiManagerParameter("subMqttLightAllOn", "Topic for switching on all lights", "switchOnAll", 100),
   WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff/shellyDevice", 100),
   WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 100),
-  WiFiManagerParameter("subMqttStartBlink", "Topic for starting blinking", "startBlink/shellyDevice", 100),
-  WiFiManagerParameter("subMqttStartFastBlink", "Topic for starting fast blinking", "startFastBlink/shellyDevice", 100),
-  WiFiManagerParameter("subMqttStopBlink", "Topic for stopping blinking", "stopBlink/shellyDevice", 100),
+  WiFiManagerParameter("subMqttBlinkingPattern", "Topic for starting blinking with the pattern given in the MQTT message. \
+                                                  The pattern is optional. It is specified with a sequence of integers indicating \
+                                                  the duration of the on/off states. The durations are in tenths of seconds", "startBlink/shellyDevice", 100),
+  WiFiManagerParameter("subMqttBlinkingDuration", "Topic for changing the blinking duration in seconds", "5", 100),
 };
 
 // The debugging options
-WiFiManagerParameter debugParams[] = 
+WiFiManagerParameter loggingParams[] = 
 {
-  WiFiManagerParameter("<br/><br/><hr><h3>Debugging options</h3>"),
+  WiFiManagerParameter("<br/><br/><hr><h3>Logging options</h3>"),
   WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to the log file)", "1", 1),
   WiFiManagerParameter("<a href=\"/log.txt\">Open_the_log_file</a>&emsp;<a href=\"/erase_log_file\">Erase_the_log_file</a><br/><br/>"),
 };
@@ -190,7 +191,6 @@ void saveParams()
     jsonBuffer[customParams[i]->getID()] = customParams[i]->getValue();
   }
 
-
   // Open the file
   File configFile = SPIFFS.open("/config.json", "w");
   if (!configFile)
@@ -233,16 +233,18 @@ void loadParams()
       if (!error)
       {
         WiFiManagerParameter** customParams = wifiManager.getParameters();
-        logging::getLogStream().print("wifi: json to load: ");
-        serializeJson(jsonBuffer, logging::getLogStream());
-        logging::getLogStream().println();
+        // Should not be too verbose otherwise it triggers the watchdog reset
+        //logging::getLogStream().print("wifi: json to load: ");
+        //serializeJson(jsonBuffer, logging::getLogStream());
+        //logging::getLogStream().println();
         JsonObject root = jsonBuffer.as<JsonObject>();
         for (JsonObject::iterator it = root.begin(); it != root.end(); ++it)
         {
           int idx = getIndexFromID(it->key().c_str());
           if (idx != -1)
           {
-            logging::getLogStream().printf("wifi: reading key \"%s\" and value \"%s\"\n", it->key().c_str(), it->value().as<char*>());
+            // Should not be too verbose otherwise it triggers the watchdog reset
+            //logging::getLogStream().printf("wifi: reading key \"%s\" and value \"%s\"\n", it->key().c_str(), it->value().as<char*>());
             customParams[idx]->setValue(it->value().as<char*>(), customParams[idx]->getValueLength());
           }
           else
@@ -393,8 +395,8 @@ void setup()
   for (int i = 0; i < sizeof(MQTTParams) / sizeof(WiFiManagerParameter); i++)
     wifiManager.addParameter(&MQTTParams[i]);
 
-  for (int i = 0; i < sizeof(debugParams) / sizeof(WiFiManagerParameter); i++)
-    wifiManager.addParameter(&debugParams[i]);
+  for (int i = 0; i < sizeof(loggingParams) / sizeof(WiFiManagerParameter); i++)
+    wifiManager.addParameter(&loggingParams[i]);
 
   // Load the custom parameters
   loadParams();
@@ -436,8 +438,9 @@ void setup()
     light::handle();
     switches::handle();
 
-    // After 1 minute in access point, reboot automatically
-    if (millis() - startAPTime > 60000)
+
+    // After 1 minute in access point and no client connected, reboot automatically
+    if ((WiFi.softAPgetStationNum()==0) && (millis() - startAPTime > 60000))
     {
       logging::getLogStream().println("wifi: still in AP mode; reboot now");
       wifiManager.reboot();
