@@ -1,7 +1,4 @@
-#include <Arduino.h>
 #include "config.h"
-
-
 namespace helpers {
 
   bool isInteger(const char* str, uint maxLength)
