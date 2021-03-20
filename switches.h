@@ -24,6 +24,7 @@ namespace switches {
   float readTemperature();
   void updateParams();
   void setup();
+  void disableInterrupt();
   void handle();
 }
 

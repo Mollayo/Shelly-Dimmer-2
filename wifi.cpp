@@ -28,7 +28,7 @@ WiFiManagerParameter customButtons[] =
   // Button for the firmware update
   WiFiManagerParameter("</form>"),
   WiFiManagerParameter(version),
-  WiFiManagerParameter("<form action=\"/update\"><input type=\"submit\" value=\"Update firmware\"></form>"),
+  WiFiManagerParameter("<form action=\"/updatePrepare\"><input type=\"submit\" value=\"Update firmware\"></form>"),
   WiFiManagerParameter("<form action=\"/config.json\"><input type=\"submit\" value=\"Download the configuration file\"></form>"),
   WiFiManagerParameter("<form action=\"/upload\"><input type=\"submit\" value=\"Upload the configuration file\"></form>")
 };
@@ -40,8 +40,8 @@ WiFiManagerParameter switchParams[] =
   WiFiManagerParameter("<br/><br/><hr><h3>Switch parameters</h3>"),
   WiFiManagerParameter("hostname", "Hostname and access point name (require reboot)", "", 30),
   WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "2", 1),
-  WiFiManagerParameter("defaultReleaseState", "Default release state (0: open, 1: close)", "0", 1),
-  WiFiManagerParameter("autoOffTimer", "Auto-off timer (value in seconds)", "", 3),
+  WiFiManagerParameter("defaultReleaseState", "Switch state for light off (0: open, 1: close(less prone to noise))", "0", 1),
+  WiFiManagerParameter("autoOffTimer", "Auto-off timer (value in seconds). Auto-off is disable for long push button press.", "", 3),
 };
 
 // The MQTT server parameters
@@ -68,7 +68,7 @@ WiFiManagerParameter MQTTParams[] =
   WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 100),
   WiFiManagerParameter("subMqttBlinkingPattern", "Topic for starting blinking with the pattern given in the MQTT message. \
                                                   The pattern is optional. It is specified with a sequence of integers indicating \
-                                                  the duration of the on/off states. The durations are in tenths of seconds", "startBlink/shellyDevice", 100),
+                                                  the duration of the on/off states. The durations are in tenths of seconds.", "startBlink/shellyDevice", 100),
   WiFiManagerParameter("subMqttBlinkingDuration", "Topic for changing the blinking duration in seconds", "5", 100),
 };
 
@@ -79,8 +79,6 @@ WiFiManagerParameter loggingParams[] =
   WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to the log file)", "1", 1),
   WiFiManagerParameter("<a href=\"/log.txt\">Open_the_log_file</a>&emsp;<a href=\"/erase_log_file\">Erase_the_log_file</a><br/><br/>"),
 };
-
-
 
 void handle()
 {
@@ -356,10 +354,38 @@ void handleFileDownload()
   wifi::getWifiManager().server.get()->send(200, "text/plain", "No file");
 }
 
+void handleSeverPathNotFound()
+{
+  wifiManager.server.get()->send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+  logging::getLogStream().printf("wifi: access to %s\n",wifiManager.server.get()->uri().c_str());
+  if (wifiManager.server.get()->args()>0)
+  {
+    logging::getLogStream().printf("wifi: with %d arguments\n",wifiManager.server.get()->args());
+    // Show the arguments
+    for (int i = 0; i < wifiManager.server.get()->args(); i++) 
+    {
+      logging::getLogStream().printf("     - %s -> ",wifiManager.server.get()->argName(i).c_str());
+      logging::getLogStream().printf("%s\n",wifiManager.server.get()->arg(i).c_str());
+    }
+  }
+}
+
 void bindServerCallback()
 {
-  // This is to handle the web page for updating the firmware
+  // This webpage is called before accessing to the webpage for firmware update
+  // This is a trick to disable timer interrupt before doing the OTA update
+  wifiManager.server.get()->on("/updatePrepare", []()
+                                {
+                                  // Diable timer interrupt since it can corrupt the OTA update
+                                  switches::disableInterrupt(),
+                                  // Do a redirection to the webpage for the OTA update
+                                  wifiManager.server.get()->sendHeader("Location", String("/update"), true);
+                                  wifiManager.server.get()->send ( 302, "text/plain", "");
+                                }
+                              );
+  // Webpage for the OTA update
   httpUpdater.setup(wifiManager.server.get(), "/update");
+  
   // Handle for managing the log file on SPIFFS
   wifiManager.server.get()->on("/log.txt", handleFileDownload);
   wifiManager.server.get()->on("/erase_log_file", logging::eraseLogFile);
@@ -375,7 +401,7 @@ void bindServerCallback()
   wifiManager.server.get()->on("/doUpload", HTTP_POST, [](){ wifiManager.server.get()->send(200, "text/plain", ""); }, handleConfigFileUpload);
 
   // callbacks for updating the STM32 firmware
-  light::bindServerCallback();  
+  light::bindServerCallback();
 }
 
 void setup()
@@ -453,6 +479,9 @@ void setup()
   WiFi.mode(WIFI_STA);
   wifiManager.setWebServerCallback(bindServerCallback);     // Add the callback to handle the page for updating the firmware
   wifiManager.startWebPortal();                             // Start the web server of WifiManager
+  // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
+  // Should be done after startWebPortal()
+  wifiManager.server.get()->onNotFound(handleSeverPathNotFound);
 
   // Setup for MQTT
   mqtt::setup();

@@ -170,7 +170,7 @@ void printTelnetMenu()
     Telnet.println(" v : get the version of the STM32 MCU");    
     Telnet.println(" br000 to br100 : set the brightness between 0% and 100%");
     Telnet.println(" on or off : switch on/off the light");
-    Telnet.println(" temp : enable/disable temperature logging");
+    Telnet.println(" temp : enable/disable temperature logging and overheating alarm");
     Telnet.println(" blpt xxx xxx xxx : set blinking pattern");
     Telnet.println(" sab : start blinking");
     Telnet.println(" sob : stop blinking");

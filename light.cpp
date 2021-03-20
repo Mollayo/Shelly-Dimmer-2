@@ -16,13 +16,13 @@ namespace light {
 volatile uint8_t minBrightness = 0;   // brightness values in %
 volatile uint8_t maxBrightness = 50;
 volatile uint8_t brightness = 0;
-uint8_t prevBrightness = 0;
 uint8_t publishedBrightness = 0;      // The last brigthness value published to MQTT
 uint8_t wattage = 0;
 
 // For the auto-off timer
 uint16_t autoOffDuration = 0;         // In seconds
-unsigned long lastLightOnTime = 0;
+volatile unsigned long lastLightOnTime = 0;
+volatile bool lightAutoTurnOffDisable = false;
 
 // For blinking
 unsigned long startBlinkingTime = 0;
@@ -84,6 +84,7 @@ uint8_t rx_payload[rx_max_payload_size];
 // For uploading the STM32 firmware
 stm32_t *stm32=NULL;
 uint32_t  stm32Addr=0;
+char stm32FirmwareUpdMsg[256]={0x00};
 
 void STM32reset()
 {
@@ -143,7 +144,8 @@ bool STM32FlashUpload(const uint8_t data[], unsigned int size)
     if (s_err != STM32_ERR_OK)
     {
       // Error
-      logging::getLogStream().println("light: error uploading firmware for STM32");
+      sprintf(stm32FirmwareUpdMsg,"failed to upload the STM32 firmware with error code %d",s_err);
+      logging::getLogStream().printf("light: %s\n",stm32FirmwareUpdMsg);
       stm32=NULL;
       stm32Addr=0;
       return false;
@@ -175,7 +177,8 @@ bool STM32FlashBegin()
   }
   else
   {
-    logging::getLogStream().println("light: failed to init the STM32 for uploading the firmware");
+    sprintf(stm32FirmwareUpdMsg,"failed to init the STM32 for uploading the firmware");
+    logging::getLogStream().printf("light: %s\n",stm32FirmwareUpdMsg);
     return false;
   }
 }
@@ -239,20 +242,20 @@ void processReceivedPacket(uint8_t payload_cmd, uint8_t* payload, uint8_t payloa
   // Command for getting the version of the STM firmware
   if (payload_cmd == CMD_GET_VERSION)
   {
-    logging::getLogStream().printf("- STM Firmware version: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("light: STM Firmware version: %s\n", helpers::hexToStr(payload, payload_size));
     if (payload[0] != 0x3F || payload[1] != 0x02)
-      logging::getLogStream().printf("- STM Firmware is 0x%02X,0x%02X. It should be 0x3F,0x02\n", payload[0], payload[1]);
+      logging::getLogStream().printf("light: STM Firmware is 0x%02X,0x%02X. It should be 0x3F,0x02\n", payload[0], payload[1]);
 
   }
   // Command for getting the state (brigthness level, wattage, etc)
   else if (payload_cmd == CMD_GET_STATE)
   {
-    logging::getLogStream().printf("- state: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("light: state: %s\n", helpers::hexToStr(payload, payload_size));
     // Bightness level: payload[3] payload[2]
     brightness = ((payload[3] << 8) + payload[2]) / 10;
     wattage = ((payload[7] << 8) + payload[6]) / 20;
-    logging::getLogStream().printf("- brightness level: %d%%\n", brightness);
-    logging::getLogStream().printf("- wattage level: %d watts\n", wattage);
+    logging::getLogStream().printf("light: brightness level: %d%%\n", brightness);
+    logging::getLogStream().printf("light: wattage level: %d watts\n", wattage);
 
     // To be done: other state values
     // See here:
@@ -276,17 +279,17 @@ void processReceivedPacket(uint8_t payload_cmd, uint8_t* payload, uint8_t payloa
     */
   }
   else if (payload_cmd == CMD_SET_BRIGHTNESS)
-    logging::getLogStream().printf("- acknowledgement frame for changing brightness: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("light: acknowledgement frame for changing brightness: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_BRIGHTNESS_ADVANCED)
-    logging::getLogStream().printf("- acknowledgement frame for changing brightness advanced: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("light: acknowledgement frame for changing brightness advanced: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_PARAMETERS)
-    logging::getLogStream().printf("- acknowledgement frame for changing dimming parameters: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("light: acknowledgement frame for changing dimming parameters: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_TYPE_2)
-    logging::getLogStream().printf("- acknowledgement frame for changing dimming 2: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("light: acknowledgement frame for changing dimming 2: %s\n", helpers::hexToStr(payload, payload_size));
   else if (payload_cmd == CMD_SET_DIMMING_TYPE_3)
-    logging::getLogStream().printf("- acknowledgement frame for changing dimming 3: %s\n", helpers::hexToStr(payload, payload_size));
+    logging::getLogStream().printf("light: acknowledgement frame for changing dimming 3: %s\n", helpers::hexToStr(payload, payload_size));
   else
-    logging::getLogStream().printf("- unknown command: 0x%02X\n", payload_cmd);
+    logging::getLogStream().printf("light: unknown command: 0x%02X\n", payload_cmd);
 }
 
 void receivePacket() {
@@ -440,7 +443,6 @@ void startBlinking()
 
 void stopBlinking()
 {
-  logging::getLogStream().printf("light: stop blinking\n");
   // stopping blinking
   // Comme back to the initial brightness level
   sendCmdSetBrightness(brightness);
@@ -507,8 +509,6 @@ void mqttCallback(const char* paramID, const char* payload)
 {
   if (strcmp(paramID, "subMqttLightOn") == 0 || strcmp(paramID, "subMqttLightAllOn") == 0)
   {
-    // reset the timer
-    lastLightOnTime  = millis();
     lightOn();
   }
   else if (strcmp(paramID, "subMqttLightOff") == 0 || strcmp(paramID, "subMqttLightAllOff") == 0)
@@ -606,28 +606,54 @@ void setBrightness(uint8_t b)
   brightness = b;
 }
 
-void lightOn()
+void lightOn(bool noLightAutoTurnOff)
 {
   logging::getLogStream().printf("light: switch on\n");
+  if (noLightAutoTurnOff==true)
+  {
+    lightAutoTurnOffDisable =true;
+    lastLightOnTime=0;
+  }
+  else
+    // Reset auto turn off timer
+    lastLightOnTime=millis();
   setBrightness(maxBrightness);
+  brightness = maxBrightness;
 }
 
 void lightOff()
 {
   logging::getLogStream().printf("light: switch off\n");
+  lastLightOnTime = 0;
+  lightAutoTurnOffDisable =false;
   setBrightness(minBrightness);
+  brightness = minBrightness;
 }
 
-ICACHE_RAM_ATTR void lightToggle()
+ICACHE_RAM_ATTR void lightToggle(bool noLightAutoTurnOff)
 {
   // If brighness different from minBrightness
   if (brightness == minBrightness)
   {
+    if (noLightAutoTurnOff==true)
+    {
+      lightAutoTurnOffDisable =true;
+      lastLightOnTime=0;
+    }
+    else
+      // Reset auto turn off timer
+      lastLightOnTime=millis();
+
+    // Switch on the light
     sendCmdSetBrightness(maxBrightness);
     brightness = maxBrightness;
   }
   else
   {
+    // Set the timer to 0
+    lastLightOnTime = 0;
+    lightAutoTurnOffDisable =false;
+    // Switch off te light
     sendCmdSetBrightness(minBrightness);
     brightness = minBrightness;
   }
@@ -635,7 +661,7 @@ ICACHE_RAM_ATTR void lightToggle()
 
 ICACHE_RAM_ATTR bool lightIsOn()
 {
-  return brightness > minBrightness;
+  return brightness != minBrightness;
 }
 
 void setup()
@@ -684,6 +710,7 @@ void handleDoUploadSTM32Firmware()
   if (upload.status == UPLOAD_FILE_START)
   {
     logging::getLogStream().printf("wifi: start uploading STM32 firmware\n");
+    memset(stm32FirmwareUpdMsg,0x00,sizeof(stm32FirmwareUpdMsg));
     STM32FlashBegin();
   }
   else if (upload.status == UPLOAD_FILE_WRITE)
@@ -693,6 +720,9 @@ void handleDoUploadSTM32Firmware()
   else if (upload.status == UPLOAD_FILE_END)
   {
     STM32FlashEnd();
+    // If not message, the firmware update has succeeded
+    if (strlen(stm32FirmwareUpdMsg)==0)
+      sprintf(stm32FirmwareUpdMsg,"STM32 firmware update succeeded");
   }
 
 }
@@ -717,7 +747,11 @@ void bindServerCallback()
   // Upload file
   // - first callback is called after the request has ended with all parsed arguments
   // - second callback handles file upload at that location
-  wifi::getWifiManager().server.get()->on("/doUploadSTM32Firmware", HTTP_POST, [](){ wifi::getWifiManager().server.get()->send(200, "text/plain", ""); }, handleDoUploadSTM32Firmware);
+  wifi::getWifiManager().server.get()->on("/doUploadSTM32Firmware", HTTP_POST, []()
+                                          {
+                                            wifi::getWifiManager().server.get()->send(200, "text/plain", stm32FirmwareUpdMsg); 
+                                          },
+                                          handleDoUploadSTM32Firmware);
 }
 
 void handle()
@@ -750,7 +784,10 @@ void handle()
 
     // Check if the blinking has to be stopped
     if (currTime - startBlinkingTime > blinkingTimerDuration*1000)
+    {
+      logging::getLogStream().printf("light: stop blinking\n");
       stopBlinking();
+    }
 
     // Alternate on/off for the blinking
     if (blinking)
@@ -794,15 +831,6 @@ void handle()
   }
 
   // For the auto-off light
-  if (brightness != prevBrightness)
-  {
-    // Set the auto-off timer for the brightness change
-    if (brightness > minBrightness)
-      lastLightOnTime  = millis();
-    else
-      lastLightOnTime = 0;
-    prevBrightness = brightness;
-  }
   if (autoOffDuration > 0 && lastLightOnTime > 0)
   {
     currTime = millis();
@@ -811,7 +839,6 @@ void handle()
     {
       logging::getLogStream().printf("light: auto-off light\n");
       lightOff();
-      lastLightOnTime = 0;
     }
   }
 }

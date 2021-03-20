@@ -22,9 +22,9 @@ namespace light
   void setDimmingParameters(const char* dimmingTypeStr, const char* debounceStr);
 
   void setBrightness(uint8_t b);
-  void lightOn();
+  void lightOn(bool noLightAutoTurnOff=false);
   void lightOff();
-  ICACHE_RAM_ATTR void lightToggle();
+  ICACHE_RAM_ATTR void lightToggle(bool noLightAutoTurnOff=false);
   ICACHE_RAM_ATTR bool lightIsOn();
 
   void STM32reset();

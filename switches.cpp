@@ -9,7 +9,7 @@
 
 namespace switches {
 
-  #define TEMPERATURE_SENSOR A0   // Correct value
+  #define TEMPERATURE_SENSOR A0
 
   #define TOGGLE_BUTTON 2
   #define PUSH_BUTTON   1
@@ -36,11 +36,11 @@ namespace switches {
   #define LONG_CLICK_DURATION 50      // 500 ms to detect long click
   #define DEBOUNCE_DURATION   20      // 200 ms
   */
-  #define INTERRUP_TIME       25      // Every 25 ms
+  #define INTERRUP_TIME       25      // 25: Every 25 ms
   #define SLOW_LED_BLINKING   10      // 250 ms
   #define FAST_LED_BLINKNG    4       // 100 ms
   #define LONG_CLICK_DURATION 20      // 500 ms to detect long click
-  #define DEBOUNCE_DURATION   4       // 100 ms. If this value is too large, it does not detect double click
+  #define DEBOUNCE_DURATION   4       // 4: 100 ms. If this value is too large, it does not detect double click
   
   ESP8266Timer ITimer;      // For the builtin Leb blinking
 
@@ -50,7 +50,7 @@ namespace switches {
 
   // The switch parameters
   volatile uint8_t switchType=TOGGLE_BUTTON;
-  volatile uint8_t defaultSwitchReleaseState=LOW;
+  volatile uint8_t switchStateForLightOff=HIGH;
   bool temperatureLogging=true;
 
   // Getter
@@ -160,63 +160,51 @@ namespace switches {
     if (switchType==TOGGLE_BUTTON)
     {
       // Toggle button
-      if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      if (swStateFrame[3]!=switchStateForLightOff && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]==switchStateForLightOff && swStateFrameDuration[4]==1)
       {
-        light::lightToggle();
-        if (light::lightIsOn())
-          return BUTTON_ON_OFF_ON;
-        else
-          return BUTTON_OFF_ON_OFF;
+        light::lightOff();
+        return BUTTON_OFF_ON_OFF;
       }
-      else if (swStateFrame[3]==defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]!=defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      else if (swStateFrame[3]==switchStateForLightOff && swStateFrameDuration[3]<LONG_CLICK_DURATION && swStateFrame[4]!=switchStateForLightOff && swStateFrameDuration[4]==1)
       {
-        light::lightToggle();
-        if (light::lightIsOn())
-          return BUTTON_ON_OFF_ON;
-        else
-          return BUTTON_OFF_ON_OFF;
+        light::lightOn();
+        return BUTTON_ON_OFF_ON;
       }
-      else if (swStateFrame[4]!=defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      else if (swStateFrame[4]!=switchStateForLightOff && swStateFrameDuration[4]==1)
       {
-        light::lightToggle();
-        if (light::lightIsOn())
-          return BUTTON_ON;
-        else
-          return BUTTON_OFF;
+        light::lightOn();
+        return BUTTON_ON;
       }
-      else if (swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      else if (swStateFrame[4]==switchStateForLightOff && swStateFrameDuration[4]==1)
       {
-        light::lightToggle();
-        if (light::lightIsOn())
-          return BUTTON_ON;
-        else
-          return BUTTON_OFF;
+        light::lightOff();
+        return BUTTON_OFF;
       }
     }
     else
     {
       // Push button
       // Detect double click -> does not work
-      if (swStateFrame[0]==defaultSwitchReleaseState &&
-          swStateFrame[1]!=defaultSwitchReleaseState && swStateFrameDuration[1]<LONG_CLICK_DURATION &&
-          swStateFrame[2]==defaultSwitchReleaseState && swStateFrameDuration[2]<LONG_CLICK_DURATION &&
-          swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
-          swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      if (swStateFrame[0]==switchStateForLightOff &&
+          swStateFrame[1]!=switchStateForLightOff && swStateFrameDuration[1]<LONG_CLICK_DURATION &&
+          swStateFrame[2]==switchStateForLightOff && swStateFrameDuration[2]<LONG_CLICK_DURATION &&
+          swStateFrame[3]!=switchStateForLightOff && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
+          swStateFrame[4]==switchStateForLightOff && swStateFrameDuration[4]==1)
       {
         light::lightToggle();
         return BUTTON_DOUBLE_CLICK;
       }
-      else if (swStateFrame[3]!=defaultSwitchReleaseState && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
-               swStateFrame[4]==defaultSwitchReleaseState && swStateFrameDuration[4]==1)
+      else if (swStateFrame[3]!=switchStateForLightOff && swStateFrameDuration[3]<LONG_CLICK_DURATION &&
+               swStateFrame[4]==switchStateForLightOff && swStateFrameDuration[4]==1)
       {
         // short click
         light::lightToggle();
         return BUTTON_SHORT_CLICK;
       }
-      else if (swStateFrame[3]==defaultSwitchReleaseState && swStateFrame[4]!=defaultSwitchReleaseState && swStateFrameDuration[4]==LONG_CLICK_DURATION)
+      else if (swStateFrame[3]==switchStateForLightOff && swStateFrame[4]!=switchStateForLightOff && swStateFrameDuration[4]==LONG_CLICK_DURATION)
       {
-        // Long click
-        light::lightToggle();
+        // Long click with parameter true to disable the light auto turn off
+        light::lightToggle(true);
         return BUTTON_LONG_CLICK;
       }
     }
@@ -243,6 +231,7 @@ namespace switches {
 
     #ifdef SHELLY_SW2
     newState=digitalRead(SHELLY_SW2);
+    //logging::getLogStream().printf("%d",newState);            // For debugging
     tmp=processFrame(newState, sw2StateFrame, sw2StateFrameDuration); 
     if (tmp!=NO_CHANGE)
       sw2State=tmp;   
@@ -298,17 +287,28 @@ namespace switches {
     #endif
     
     // Interrup every 25 ms, misses click with 50 ms
+    // Bug: interrup should be disable when firmware is uploading
     ITimer.attachInterruptInterval(1000 * INTERRUP_TIME, checkSwitch);
   }
 
+  // Disable timer interrupt. This is needed for the OTA firmware update since it can corrupt the uploading
+  void disableInterrupt()
+  {
+    ITimer.detachInterrupt();
+    logging::getLogStream().println("light: timer interrupt disable");
+  }
+  
   void overheating(int temperature)
   {
     // If above 95, the light is switched off
     if (temperature>95.0)
     {
-      logging::getLogStream().printf("temperature: overheating; the light is switched off.\n");
+      if (temperatureLogging)
+        logging::getLogStream().printf("light: overheating; the light is switched off.\n");
       light::setBrightness(0);            // Brightness to 0
       light::stopBlinking();      // Stop blinking
+      if (temperatureLogging)
+        logging::getLogStream().printf("light: stop blinking\n");
     }
     overheatingAlarm = true;
   }
@@ -463,9 +463,9 @@ namespace switches {
     if (!helpers::isInteger(str,1))
       return;
     if (str[0]=='0')
-      defaultSwitchReleaseState=LOW;
+      switchStateForLightOff=LOW;
     else
-      defaultSwitchReleaseState=HIGH;
+      switchStateForLightOff=HIGH;
   }
 
 }
