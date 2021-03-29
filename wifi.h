@@ -26,6 +26,7 @@ namespace wifi {
   void loadParams();
   void bindServerCallback();
   void setup();
+  void factoryReset();
 
 }
 

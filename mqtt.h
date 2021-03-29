@@ -16,6 +16,5 @@ namespace mqtt
   // Methods for publishing to MQTT
   bool publishMQTT(const char *topic, const char *payload, int QoS=1);
 }
-  
 
 #endif

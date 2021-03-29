@@ -51,6 +51,7 @@ namespace switches {
   // The switch parameters
   volatile uint8_t switchType=TOGGLE_BUTTON;
   volatile uint8_t switchStateForLightOff=HIGH;
+
   bool temperatureLogging=true;
 
   // Getter
@@ -219,7 +220,22 @@ namespace switches {
     newState=digitalRead(SHELLY_SW0);
     tmp=processFrame(newState, sw0StateFrame, sw0StateFrameDuration);
     if (tmp!=NO_CHANGE)
+    {
       sw0State=tmp;
+      switch(sw0State)
+      {
+        case BUTTON_SHORT_CLICK:
+        logging::getLogStream().println("switch: BUTTON_SHORT_CLICK for built-in switch");
+        break;
+        case BUTTON_DOUBLE_CLICK:
+        logging::getLogStream().println("switch: BUTTON_DOUBLE_CLICK for built-in switch");
+        break;
+        case BUTTON_LONG_CLICK:
+        logging::getLogStream().println("switch: BUTTON_LONG_CLICK for built-in switch");
+        wifi::factoryReset();
+        break;
+      }
+    }
     #endif
     
     #ifdef SHELLY_SW1
@@ -248,7 +264,6 @@ namespace switches {
       }
     }
   }
-  
   
   void setup()
   {
@@ -295,7 +310,7 @@ namespace switches {
   void disableInterrupt()
   {
     ITimer.detachInterrupt();
-    logging::getLogStream().println("light: timer interrupt disable");
+    logging::getLogStream().println("switch: timer interrupt disable");
   }
   
   void overheating(int temperature)
