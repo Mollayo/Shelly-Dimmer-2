@@ -94,8 +94,10 @@ void LogStream::flush()
   {
     case LogToSerial:
       Serial.flush();
+      break;
     case LogToTelnet:
       Telnet.flush();
+      break;
   }
 }
 

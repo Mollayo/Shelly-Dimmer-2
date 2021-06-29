@@ -742,6 +742,24 @@ void addWifiManagerCustomParams()
 // HTTP callback for updating the STM32 firmware
 void bindServerCallback()
 {
+  // HTTP callback for controling the light
+  wifi::getWifiManager().server.get()->on("/on", []()
+                                {
+                                  // Light on
+                                  lightOn();
+                                  // Send OK text
+                                  wifi::getWifiManager().server.get()->send ( 200, "text/plain", "Ok");
+                                }
+                              );
+  wifi::getWifiManager().server.get()->on("/off", []()
+                                {
+                                  // Light off
+                                  lightOff();
+                                  // Send OK text
+                                  wifi::getWifiManager().server.get()->send ( 200, "text/plain", "Ok");
+                                }
+                              );
+
   // Handle to upload the configuration file
   wifi::getWifiManager().server.get()->on("/uploadSTM32Firmware", HTTP_GET, handleUploadSTM32Firmware);
   // Upload file
