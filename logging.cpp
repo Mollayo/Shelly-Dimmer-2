@@ -1,6 +1,8 @@
 #include "logging.h"
 
 #include <ESP8266WiFi.h>
+#include <LittleFS.h>
+
 #include "config.h"
 #include "wifi.h"
 #include "light.h"
@@ -51,7 +53,7 @@ size_t LogStream::write(uint8_t data)
     case LogToTelnet:
       return Telnet.write(data);
     case LogToFile:
-      logFile = SPIFFS.open("/log.txt", "a");
+      logFile = LittleFS.open("/log.txt", "a");
       if (logFile)
       {
         tmp = logFile.write(data);
@@ -254,10 +256,10 @@ void disableTelnet()
 
 void eraseLogFile()
 {
-  if (SPIFFS.exists("/log.txt"))
+  if (LittleFS.exists("/log.txt"))
   {
     // Erase the content of the file
-    File logFile = SPIFFS.open("/log.txt", "w");
+    File logFile = LittleFS.open("/log.txt", "w");
     if (logFile)
       logFile.close();
   }

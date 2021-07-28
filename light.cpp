@@ -443,6 +443,7 @@ void startBlinking()
 
 void stopBlinking()
 {
+  logging::getLogStream().printf("light: stop blinking\n");
   // stopping blinking
   // Comme back to the initial brightness level
   sendCmdSetBrightness(brightness);
@@ -510,6 +511,10 @@ void mqttCallback(const char* paramID, const char* payload)
   if (strcmp(paramID, "subMqttLightOn") == 0 || strcmp(paramID, "subMqttLightAllOn") == 0)
   {
     lightOn();
+  }
+  else if (strcmp(paramID, "subMqttLightToggle") == 0)
+  {
+    lightToggle();
   }
   else if (strcmp(paramID, "subMqttLightOff") == 0 || strcmp(paramID, "subMqttLightAllOff") == 0)
     lightOff();

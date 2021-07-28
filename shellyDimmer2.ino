@@ -10,14 +10,15 @@
 #include "light.h"
 #include "switches.h"
 
+#include "LittleFS.h"
 
 void setup()
 {
   // Setup serial
   Serial.begin(115200);
 
-  // Mount the SPIFFS
-  if (!SPIFFS.begin())
+  // Mount the LittleFS
+  if (!LittleFS.begin())
     logging::getLogStream().println("Failed to mounted file system");
 
   // Setup for the switches and the light

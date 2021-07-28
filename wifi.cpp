@@ -3,6 +3,8 @@
 #include <WiFiManager.h>
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <LittleFS.h>
+
 #include "wifi.h"
 #include "logging.h"
 #include "config.h"
@@ -39,8 +41,8 @@ WiFiManagerParameter switchParams[] =
   WiFiManagerParameter("<form action=\"/paramsave\">"),
   WiFiManagerParameter("<br/><br/><hr><h3>Switch parameters</h3>"),
   WiFiManagerParameter("hostname", "Hostname and access point name (require reboot)", "", 30),
-  WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "2", 1),
-  WiFiManagerParameter("defaultReleaseState", "Switch state for light off (0: open, 1: close(less prone to noise))", "0", 1),
+  WiFiManagerParameter("switchType", "Switch type (1: push button, 2: toggle button)", "2", 2),
+  WiFiManagerParameter("defaultReleaseState", "Switch state for light off (0: open, 1: close(less prone to noise))", "0", 2),
   WiFiManagerParameter("autoOffTimer", "Auto-off timer (value in seconds). Auto-off is disable for long push button press.", "", 3),
 };
 
@@ -65,18 +67,19 @@ WiFiManagerParameter MQTTParams[] =
   WiFiManagerParameter("subMqttLightOn", "Topic for switching on", "switchOn/shellyDevice", 100),
   WiFiManagerParameter("subMqttLightAllOn", "Topic for switching on all lights", "switchOnAll", 100),
   WiFiManagerParameter("subMqttLightOff", "Topic for switching off", "switchOff/shellyDevice", 100),
+  WiFiManagerParameter("subMqttLightToggle", "Topic for light toggling", "toggle/shellyDevice", 100),  
   WiFiManagerParameter("subMqttLightAllOff", "Topic for switching off all lights", "switchOffAll", 100),
   WiFiManagerParameter("subMqttBlinkingPattern", "Topic for starting blinking with the pattern given in the MQTT message. \
                                                   The pattern is optional. It is specified with a sequence of integers indicating \
-                                                  the duration of the on/off states. The durations are in tenths of seconds.", "startBlink/shellyDevice", 100),
-  WiFiManagerParameter("subMqttBlinkingDuration", "Topic for changing the blinking duration in seconds", "5", 100),
+                                                  the duration of the on/off states. The durations are in tenths of seconds.", "startBlinking", 100),
+  WiFiManagerParameter("subMqttBlinkingDuration", "Topic for changing the blinking duration in seconds", "setBlinkingDuration", 100),
 };
 
 // The debugging options
 WiFiManagerParameter loggingParams[] = 
 {
   WiFiManagerParameter("<br/><br/><hr><h3>Logging options</h3>"),
-  WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to the log file)", "0", 1),
+  WiFiManagerParameter("logOutput", "Logging (0: disable, 1: to Serial, 2: to Telnet, 3: to the log file)", "0", 2),
   WiFiManagerParameter("<a href=\"/log.txt\">Open_the_log_file</a>&emsp;<a href=\"/erase_log_file\">Erase_the_log_file</a><br/><br/>"),
 };
 
@@ -174,9 +177,17 @@ void saveParams()
 {
   //logging::getLogStream().println("wifi: saving custom parameters");
 
-  // Create the json object from the custom parameters
-  DynamicJsonDocument jsonBuffer(2048);
   WiFiManagerParameter** customParams = wifiManager.getParameters();
+
+  // Open the file
+  File configFile = LittleFS.open("/config.json", "w");
+  if (!configFile)
+  {
+    logging::getLogStream().println("wifi: failed to open config.json");
+    return;
+  }
+  configFile.print("{\n");
+  bool printComma=false;
   for (int i = 0; i < wifiManager.getParametersCount(); i++)
   {
     if (customParams[i]->getID() == NULL)
@@ -185,23 +196,24 @@ void saveParams()
       continue;
     if (customParams[i]->getValue() == NULL)
       continue;
-    //logging::getLogStream().printf("wifi: found custom param to save: \"%s\" with value \"%s\"\n", customParams[i]->getID(), customParams[i]->getValue());
-    jsonBuffer[customParams[i]->getID()] = customParams[i]->getValue();
+    if (printComma)
+    {
+      configFile.print(",\n");
+      printComma=false;
+    }
+    char tmp[256];
+    sprintf(tmp,"\"%s\":\"%s\"",customParams[i]->getID(),customParams[i]->getValue());
+    configFile.print(tmp);
+    // SPIFFS: There seems to be some conflicting interaction between the 3.0.0 core and the deprecated SPIFFS
+    // see: https://github.com/esp8266/Arduino/issues/8070
+    //logging::getLogStream().printf("wifi: writing %s\n", tmp);
+    printComma=true;
   }
+  configFile.print("\n}");
 
-  // Open the file
-  File configFile = SPIFFS.open("/config.json", "w");
-  if (!configFile)
-  {
-    logging::getLogStream().println("wifi: failed to open config.json");
-    return;
-  }
-  // Save the json object to the file
-  serializeJson(jsonBuffer, configFile);
   // Close the file
   configFile.close();
   //logging::getLogStream().printf("wifi: saving: ");
-  //serializeJson(jsonBuffer, logging::getLogStream());
   //logging::getLogStream().println();
 
   // Update the system with the new params
@@ -213,21 +225,14 @@ void saveParams()
 void loadParams()
 {
   logging::getLogStream().println("wifi: loading custom parameters");
-  if (SPIFFS.exists("/config.json"))
+  if (LittleFS.exists("/config.json"))
   {
-    File configFile = SPIFFS.open("/config.json", "r");
+    File configFile = LittleFS.open("/config.json", "r");
     if (configFile)
     {
-      size_t size = configFile.size();
-      std::unique_ptr<char[]> buf(new char[size]);
-      configFile.readBytes(buf.get(), size);
-
-      // Close file
-      configFile.close();
-
       // Process the json data
       DynamicJsonDocument jsonBuffer(2048);
-      DeserializationError error = deserializeJson(jsonBuffer, buf.get());
+      DeserializationError error = deserializeJson(jsonBuffer, configFile);
       if (!error)
       {
         WiFiManagerParameter** customParams = wifiManager.getParameters();
@@ -251,6 +256,8 @@ void loadParams()
       }
       else
         logging::getLogStream().println("wifi: failed to load json params");
+      // Close file
+      configFile.close();
     }
     else
     {
@@ -295,10 +302,10 @@ void handleConfigFileUpload()
   HTTPUpload& upload = wifiManager.server.get()->upload();
   if (upload.status == UPLOAD_FILE_START)
   {
-    logging::getLogStream().printf("wifi: start uploading with the SPIFFS name \"/config.json\"\n");
-    fsUploadFile = SPIFFS.open("/config.json", "w");
+    logging::getLogStream().printf("wifi: start uploading with the LittleFS name \"/config.json\"\n");
+    fsUploadFile = LittleFS.open("/config.json", "w");
     if (!fsUploadFile)
-      logging::getLogStream().printf("wifi: failed with SPIFFS.open()\n");
+      logging::getLogStream().printf("wifi: failed with LittleFS.open()\n");
   }
   else if (upload.status == UPLOAD_FILE_WRITE)
   {
@@ -322,9 +329,9 @@ void handleConfigFileUpload()
 
 void handleFileDownload()
 {
-  if (SPIFFS.exists(wifi::getWifiManager().server.get()->uri()))
+  if (LittleFS.exists(wifi::getWifiManager().server.get()->uri()))
   {
-    File file = SPIFFS.open(wifi::getWifiManager().server.get()->uri(), "r");
+    File file = LittleFS.open(wifi::getWifiManager().server.get()->uri(), "r");
     if (file)
     {
       size_t fileSize = file.size();
@@ -390,7 +397,7 @@ void bindServerCallback()
   // This is to handle the web page for updating the firmware
   httpUpdater.setup(wifiManager.server.get(), "/update");
   
-  // Handle for managing the log file on SPIFFS
+  // Handle for managing the log file on LittleFS
   wifiManager.server.get()->on("/log.txt", handleFileDownload);
   wifiManager.server.get()->on("/erase_log_file", logging::eraseLogFile);
 
@@ -411,12 +418,12 @@ void factoryReset()
 {
   logging::getLogStream().println("wifi: factory reset and reboot...");
   wifiManager.erase(true);
-  if (SPIFFS.format())
-    logging::getLogStream().println("wifi: failed to format SPIFFS");
+  if (LittleFS.format())
+    logging::getLogStream().println("wifi: failed to format LittleFS");
   else
-    logging::getLogStream().println("wifi: SPIFFS erased");
-  // SPIFFS should be unmounted in order to effectivly erae the all the files
-  SPIFFS.end();
+    logging::getLogStream().println("wifi: LittleFS erased");
+  // LittleFS should be unmounted in order to effectivly erae the all the files
+  LittleFS.end();
   wifiManager.reboot();
 }
 
