@@ -30,7 +30,6 @@ WiFiManagerParameter customButtons[] =
   // Button for the firmware update
   WiFiManagerParameter("</form>"),
   WiFiManagerParameter(version),
-  WiFiManagerParameter("<form action=\"/updatePrepare\"><input type=\"submit\" value=\"Update firmware\"></form>"),
   WiFiManagerParameter("<form action=\"/config.json\"><input type=\"submit\" value=\"Download the configuration file\"></form>"),
   WiFiManagerParameter("<form action=\"/config_upload\"><input type=\"submit\" value=\"Upload the configuration file\"></form>")
 };
@@ -60,7 +59,6 @@ WiFiManagerParameter MQTTParams[] =
   WiFiManagerParameter("pubMqttSwitchEvents", "Switch events", "switch/shellyDevice", 100),
   WiFiManagerParameter("pubMqttAlarmOverheat", "Overheat alarm", "shellyDevice/alarm/overheat", 100),
   WiFiManagerParameter("pubMqttTemperature", "Internal temperature", "temperature/shellyDevice", 100),
-  WiFiManagerParameter("pubMqttConnecting", "Connecting to the broker", "connecting/shellyDevice", 100),
 
   // The MQTT subscribe
   WiFiManagerParameter("<br/><br/><hr><h3>MQTT subscribe</h3>"),
@@ -381,22 +379,6 @@ void handleSeverPathNotFound()
 
 void bindServerCallback()
 {
-  // This webpage is called before accessing to the webpage for firmware update
-  // This is a trick to disable timer interrupt before doing the OTA update
-  wifiManager.server.get()->on("/updatePrepare", []()
-                                {
-                                  // Disable timer interrupt since it can corrupt the OTA update
-                                  switches::disableInterrupt(),
-                                  // Disable the serial connection since it can also corrupt the OTA update
-                                  Serial.end();
-                                  // Do a redirection to the webpage for the OTA update
-                                  wifiManager.server.get()->sendHeader("Location", String("/update"), true);
-                                  wifiManager.server.get()->send ( 302, "text/plain", "");
-                                }
-                              );
-  // This is to handle the web page for updating the firmware
-  httpUpdater.setup(wifiManager.server.get(), "/update");
-  
   // Handle for managing the log file on LittleFS
   wifiManager.server.get()->on("/log.txt", handleFileDownload);
   wifiManager.server.get()->on("/erase_log_file", logging::eraseLogFile);
@@ -427,6 +409,14 @@ void factoryReset()
   wifiManager.reboot();
 }
 
+void prepareOTA()
+{
+  // Disable timer interrupt since it can corrupt the OTA update
+  switches::disableInterrupt(),
+  // Disable the serial connection since it can also corrupt the OTA update
+  Serial.end();
+}
+
 void setup()
 {
   //wifiManager.resetSettings();              // Reset the wifi settings for debugging
@@ -447,6 +437,8 @@ void setup()
   for (int i = 0; i < sizeof(loggingParams) / sizeof(WiFiManagerParameter); i++)
     wifiManager.addParameter(&loggingParams[i]);
 
+  wifiManager.setPreOtaUpdateCallback(prepareOTA);
+
   // Load the custom parameters
   loadParams();
   updateSystemWithWifiManagerParams();
@@ -454,8 +446,8 @@ void setup()
   logging::getLogStream().println("wifi: starting WiFi...");
 
   // The menu options on the main page
-  const char* menu[] = {"wifi", "info", "param", "restart"};
-  wifiManager.setMenu(menu, 4);
+  const char* menu[] = {"wifi", "info", "param", "update", "restart"};
+  wifiManager.setMenu(menu, 5);
 
   // Set the callback for saving the custom parameters
   wifiManager.setSaveParamsCallback(saveParams);

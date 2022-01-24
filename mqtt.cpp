@@ -17,6 +17,7 @@ namespace mqtt
 {
 WiFiClient wifiClient;
 Adafruit_MQTT *mqttClient = NULL;
+char mqttClientId[18] = {0x00};  //98_F4_AB_B9_8A_73
 #define NB_MAX_SUBSCRIBE 7
 Adafruit_MQTT_Subscribe *mqttSubscribe[NB_MAX_SUBSCRIBE] = {NULL};
 
@@ -26,7 +27,6 @@ unsigned long lastTempPublishTime = 0;      // For pubishing the temperature at 
 unsigned long lastMQTTPublishTime = 0;      // For the ping to the broker to keep alive the connection
 const char* mqttServerIP;
 uint16 mqttPort = 0;
-bool doPublishConnectingToBroker = false;
 
 
 void callback(const char* topic, char* msg)
@@ -53,7 +53,8 @@ void updateParams()
     {
       if (mqttSubscribe[i] != NULL)
       {
-        mqttClient->unsubscribe(mqttSubscribe[i]);
+        // No need to unsubscribe. This is done automatically at the disconnection
+        //mqttClient->unsubscribe(mqttSubscribe[i]);
         delete mqttSubscribe[i];
         mqttSubscribe[i] = NULL;
       }
@@ -73,8 +74,15 @@ void updateParams()
   if (mqttServerIP != NULL && strlen(mqttServerIP) > 0)
   {
     logging::getLogStream().printf("mqtt: set the new MQTT broker to %s:%d\n", mqttServerIP, mqttPort);
-    mqttClient = new Adafruit_MQTT_Client(&wifiClient, mqttServerIP, mqttPort);
-
+    uint8_t mac[6];   // 98_F4_AB_B9_8A_73
+    WiFi.macAddress(mac);
+    const char* tmp=helpers::hexToStr(mac, 6);
+    memcpy(mqttClientId,tmp,sizeof(mqttClientId));
+    logging::getLogStream().printf("mqtt: MQTT cliend Id %s\n", mqttClientId);
+    mqttClient = new Adafruit_MQTT_Client(&wifiClient, mqttServerIP, mqttPort, mqttClientId, "", "");
+    //mqttClient = new Adafruit_MQTT_Client(&wifiClient, mqttServerIP, mqttPort);
+    mqttClient->setDebugStream(&logging::getLogStream());
+    
     // Subscribe to all the topics
     int topicIdx = 0;
     WiFiManagerParameter** customParams = wifi::getWifiManager().getParameters();
@@ -121,21 +129,6 @@ bool publishMQTT(const char *topic, const char *payload, int QoS)
   }
 }
 
-void publishMQTTConnectingToBroker()
-{
-  if (doPublishConnectingToBroker == false)
-    return;
-  const char* topic = wifi::getParamValueFromID("pubMqttConnecting");
-  if (topic != NULL)
-  {
-    // Publish its IP address
-    char payload[20];
-    sprintf(payload, "%s", WiFi.localIP().toString().c_str());
-    if (publishMQTT(topic, payload, 1))
-      doPublishConnectingToBroker = false;    // To indicate that this has been published successfully
-  }
-}
-
 void keepConnectionAlive()
 {
   if (mqttClient == NULL)
@@ -173,8 +166,6 @@ void publishMQTTTempAtRegularInterval()
       sprintf(payload, "%d", temperature);
       publishMQTT(topic, payload, 0);
     }
-    // Publish the message "connecting to the borker"
-    publishMQTTConnectingToBroker();
   }
 }
 
@@ -189,7 +180,7 @@ void handle()
     // If not connected
     if (!mqttClient->connected())
     {
-      mqttClient->disconnect();
+      //mqttClient->disconnect();
       unsigned long now = millis();
       if (now - lastReconnectAttemptTime > 5000)
       {
@@ -201,9 +192,7 @@ void handle()
           // connect will return 0 for connected
           lastReconnectAttemptTime = 0;
           logging::getLogStream().printf("mqtt: connected to %s:%d\n", mqttServerIP, mqttPort);
-          const char* topic = wifi::getParamValueFromID("pubMqttConnecting");
-          // Publish the message "connected to broker" if the topic is defined
-          doPublishConnectingToBroker = (topic != NULL);
+          lastMQTTPublishTime=millis();
         }
         else
           logging::getLogStream().printf("mqtt: failed to connect to %s:%d with error %s\n", mqttServerIP, mqttPort, mqttClient->connectErrorString(ret));
