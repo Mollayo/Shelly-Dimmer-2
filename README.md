@@ -4,7 +4,7 @@ Custome firmware for the Shelly Dimmer 2
 This is a firmware for the Shelly Dimmer 2 (see https://shelly.cloud/knowledge-base/devices/shelly-dimmer-2/). This firmware has been developped with the following libraries:
 - ESP8266TimerInterrupt 1.4.0: https://github.com/khoih-prog/ESP8266TimerInterrupt
 - WifiManager 2.0.3-alpha: https://github.com/tzapu/WiFiManager
-- Adafruit MQTT Library 2.4.1: https://github.com/adafruit/Adafruit_MQTT_Library
+- pubsubclient: https://github.com/arendst/Tasmota/tree/development/lib/default/pubsubclient-2.8.13
 - Arduino IDE 1.8.3
 
 The board "Generic ESP8266 Module" should be selected when generating the compiled binary.
