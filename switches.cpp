@@ -446,7 +446,7 @@ namespace switches {
           sprintf(payload, "\"%s\" %f", hn, temperature);
         else
           sprintf(payload, "%f", temperature);        
-        if (mqtt::publishMQTT(topic, payload, 1))
+        if (mqtt::publishMQTT(topic, payload))
           mqttOverheatingAlarm=true;
       }
     }

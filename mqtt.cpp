@@ -7,37 +7,49 @@
 #include "light.h"
 #include "mqtt.h"
 
+/*
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
+*/
+#include <PubSubClient.h>
 
-// Keep the MQTT connection the longuest possible, this should be done in the "Adafruit_MQTT.h" file
-//#define MQTT_CONN_KEEPALIVE 0xFFFF
 
 namespace mqtt
 {
 WiFiClient wifiClient;
-Adafruit_MQTT *mqttClient = NULL;
+//Adafruit_MQTT *mqttClient = NULL;
+PubSubClient *mqttClient = NULL;
+
 char mqttClientId[18] = {0x00};  //98_F4_AB_B9_8A_73
 #define NB_MAX_SUBSCRIBE 7
-Adafruit_MQTT_Subscribe *mqttSubscribe[NB_MAX_SUBSCRIBE] = {NULL};
+//Adafruit_MQTT_Subscribe *mqttSubscribe[NB_MAX_SUBSCRIBE] = {NULL};
 
 // For the MQTT broker
 unsigned long lastReconnectAttemptTime = 0;
 unsigned long lastTempPublishTime = 0;      // For pubishing the temperature at regular time
-unsigned long lastMQTTPublishTime = 0;      // For the ping to the broker to keep alive the connection
 const char* mqttServerIP;
 uint16 mqttPort = 0;
+char receivedMqttMsg[100];
 
 
-void callback(const char* topic, char* msg)
+void callback(char* topic, byte* msg, unsigned int length)
 {
+  if (length>sizeof(receivedMqttMsg)+1)
+  {
+    memcpy(receivedMqttMsg,msg,sizeof(receivedMqttMsg)-1);
+    receivedMqttMsg[sizeof(receivedMqttMsg)-1]=0x00;
+    logging::getLogStream().printf("mqtt: error msg too long \"%s\" and payload \"%s\"\n", topic, receivedMqttMsg);
+    return;
+  }
+  memcpy(receivedMqttMsg,msg,length);
+  receivedMqttMsg[length]=0x00;
   // handle message arrived
-  logging::getLogStream().printf("mqtt: receiving a message with topic \"%s\" and payload \"%s\"\n", topic, msg);
+  logging::getLogStream().printf("mqtt: receiving a message with topic \"%s\" and payload \"%s\"\n", topic, receivedMqttMsg);
 
   // find to which functionnality this topic is associated with
   const char* paramID = wifi::getIDFromParamValue(topic);
   if (paramID != NULL)
-    light::mqttCallback(paramID, msg);
+    light::mqttCallback(paramID, (char*)receivedMqttMsg);
 }
 
 void updateParams()
@@ -48,18 +60,6 @@ void updateParams()
   if (mqttClient != NULL)
   {
     logging::getLogStream().printf("mqtt: disconnect from %s:%d\n", mqttServerIP, mqttPort);
-    // delete all the topics
-    for (int i = 0; i < NB_MAX_SUBSCRIBE; i++)
-    {
-      if (mqttSubscribe[i] != NULL)
-      {
-        // No need to unsubscribe. This is done automatically at the disconnection
-        //mqttClient->unsubscribe(mqttSubscribe[i]);
-        delete mqttSubscribe[i];
-        mqttSubscribe[i] = NULL;
-      }
-    }
-
     // delete the mqttClient
     mqttClient->disconnect();
     delete mqttClient;
@@ -79,29 +79,10 @@ void updateParams()
     const char* tmp=helpers::hexToStr(mac, 6);
     memcpy(mqttClientId,tmp,sizeof(mqttClientId));
     logging::getLogStream().printf("mqtt: MQTT cliend Id %s\n", mqttClientId);
-    mqttClient = new Adafruit_MQTT_Client(&wifiClient, mqttServerIP, mqttPort, mqttClientId, "", "");
-    //mqttClient = new Adafruit_MQTT_Client(&wifiClient, mqttServerIP, mqttPort);
-    mqttClient->setDebugStream(&logging::getLogStream());
-    
-    // Subscribe to all the topics
-    int topicIdx = 0;
-    WiFiManagerParameter** customParams = wifi::getWifiManager().getParameters();
-    for (int i = 0; i < wifi::getWifiManager().getParametersCount(); i++)
-    {
-      if (customParams[i]->getID() == NULL)
-        continue;
-      if (strncmp(customParams[i]->getID(), "subMqtt", 7) != 0)
-        continue;
-      if (customParams[i]->getValue() == NULL)
-        continue;
-      if (strlen(customParams[i]->getValue()) == 0)
-        continue;
-
-      mqttSubscribe[topicIdx] = new Adafruit_MQTT_Subscribe(mqttClient, customParams[i]->getValue(), 2);        // QoS=2
-      mqttClient->subscribe(mqttSubscribe[topicIdx]);
-      topicIdx++;
-      logging::getLogStream().printf("mqtt: subscribing to %s\n", customParams[i]->getValue());
-    }
+    mqttClient = new PubSubClient(wifiClient);
+    mqttClient->setServer(mqttServerIP, mqttPort);
+    mqttClient->setCallback(callback);
+    //mqttClient = new Adafruit_MQTT_Client(&wifiClient, mqttServerIP, mqttPort, mqttClientId, "", "");
   }
   else
     logging::getLogStream().printf("mqtt: MQTT broker not defined\n");
@@ -111,13 +92,12 @@ void setup()
 {
 }
 
-bool publishMQTT(const char *topic, const char *payload, int QoS)
+bool publishMQTT(const char *topic, const char *payload)
 {
   if (mqttClient == NULL)
     return false;
-  if (mqttClient->publish(topic, payload, QoS))
+  if (mqttClient->publish(topic, payload))
   {
-    lastMQTTPublishTime=millis();
     logging::getLogStream().printf("mqtt: publishing with topic \"%s\" and payload \"%s\"\n", topic, payload);
     return true;
   }
@@ -129,25 +109,6 @@ bool publishMQTT(const char *topic, const char *payload, int QoS)
   }
 }
 
-void keepConnectionAlive()
-{
-  if (mqttClient == NULL)
-    return;
-  unsigned long now = millis();
-  if ((now - lastMQTTPublishTime)/1000 > MQTT_CONN_KEEPALIVE)
-  {
-    if(! mqttClient->ping()) 
-    {
-      logging::getLogStream().printf("mqtt: ping failed. Will disconnect\n");
-      mqttClient->disconnect();
-    }
-    else
-    {
-      logging::getLogStream().printf("mqtt: ping to the broker\n");
-      lastMQTTPublishTime=now;
-    }
-  }
-}
 
 void publishMQTTTempAtRegularInterval()
 {
@@ -164,49 +125,64 @@ void publishMQTTTempAtRegularInterval()
       char payload[8];
       int temperature = switches::getTemperature();
       sprintf(payload, "%d", temperature);
-      publishMQTT(topic, payload, 0);
+      publishMQTT(topic, payload);
     }
   }
 }
 
-void handle()
+void connectToMQTTServer()
 {
-  // Keep connection alive
-  keepConnectionAlive();
-      
+  // Attempt to reconnect
+  bool ret = mqttClient->connect(mqttClientId);
+  if (ret == true)
+  {
+    // connect will return 0 for connected
+    lastReconnectAttemptTime = 0;
+    logging::getLogStream().printf("mqtt: connected to %s:%d\n", mqttServerIP, mqttPort);
+
+    // Subscribe to all the topics
+    int topicIdx = 0;
+    WiFiManagerParameter** customParams = wifi::getWifiManager().getParameters();
+    for (int i = 0; i < wifi::getWifiManager().getParametersCount(); i++)
+    {
+      if (customParams[i]->getID() == NULL)
+        continue;
+      if (strncmp(customParams[i]->getID(), "subMqtt", 7) != 0)
+        continue;
+      if (customParams[i]->getValue() == NULL)
+        continue;
+      if (strlen(customParams[i]->getValue()) == 0)
+        continue;
+
+      //mqttSubscribe[topicIdx] = new Adafruit_MQTT_Subscribe(mqttClient, customParams[i]->getValue(), 2);        // QoS=2
+      mqttClient->subscribe(customParams[i]->getValue());
+      topicIdx++;
+      logging::getLogStream().printf("mqtt: subscribing to %s\n", customParams[i]->getValue());
+    }
+  }
+  else
+    logging::getLogStream().printf("mqtt: failed to connect to %s:%d\n", mqttServerIP, mqttPort);
+}
+
+void handle()
+{      
   // If the MQTT server has been defined
   if (mqttClient != NULL)
   {
     // If not connected
     if (!mqttClient->connected())
     {
-      //mqttClient->disconnect();
       unsigned long now = millis();
       if (now - lastReconnectAttemptTime > 5000)
       {
         lastReconnectAttemptTime = now;
-        // Attempt to reconnect
-        uint8_t ret = mqttClient->connect();
-        if (ret == 0)
-        {
-          // connect will return 0 for connected
-          lastReconnectAttemptTime = 0;
-          logging::getLogStream().printf("mqtt: connected to %s:%d\n", mqttServerIP, mqttPort);
-          lastMQTTPublishTime=millis();
-        }
-        else
-          logging::getLogStream().printf("mqtt: failed to connect to %s:%d with error %s\n", mqttServerIP, mqttPort, mqttClient->connectErrorString(ret));
+        connectToMQTTServer();
       }
     }
     else
     {
       // mqttClient connected, check for the topics that have been subscribed
-      Adafruit_MQTT_Subscribe *subscription = mqttClient->readSubscription();
-      if (subscription != NULL)
-      {
-        // If MQTT message received, call the callback
-        callback(subscription->topic, (char*)subscription->lastread);
-      }
+      mqttClient->loop();
 
       // Publish the temperature at regular interval
       publishMQTTTempAtRegularInterval();
