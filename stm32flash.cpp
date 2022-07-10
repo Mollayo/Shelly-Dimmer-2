@@ -179,7 +179,7 @@ static stm32_err_t stm32_get_ack_timeout(const stm32_t *stm, uint32_t timeout)
 
 		if (ret != 1) {
 			DEBUG_MSG("Failed to read ACK byte");
-			return STM32_ERR_UNKNOWN;
+			return STM32_ERR_READ;
 		}
 
 		if (byte == STM32_ACK)
@@ -213,7 +213,7 @@ static stm32_err_t stm32_send_command_timeout(const stm32_t *stm,
 	ret = stream->write(buf, 2);
 	if (ret != 2) {
 		DEBUG_MSG("Failed to send command");
-		return STM32_ERR_UNKNOWN;
+		return STM32_ERR_FAILED_TO_SEND_CMD;
 	}
 	s_err = stm32_get_ack_timeout(stm, timeout);
 	if (s_err == STM32_ERR_OK)
@@ -222,7 +222,7 @@ static stm32_err_t stm32_send_command_timeout(const stm32_t *stm,
 		DEBUG_MSG("Got NACK from device on command 0x%02x", cmd);
 	else
 		DEBUG_MSG("Unexpected reply from device on command 0x%02x", cmd);
-	return STM32_ERR_UNKNOWN;
+	return s_err;
 }
 
 static stm32_err_t stm32_send_command(const stm32_t *stm, const uint8_t cmd)
@@ -576,17 +576,17 @@ stm32_err_t stm32_write_memory(const stm32_t *stm, uint32_t address,
 	stm32_err_t s_err;
 
 	if (!len)
-		return STM32_ERR_OK;
+		return STM32_ERR_WRONG_DATA_LENGTH;
 
 	if (len > 256) {
 		DEBUG_MSG("Error: READ length limit at 256 bytes");
-		return STM32_ERR_UNKNOWN;
+		return STM32_ERR_WRONG_DATA_LENGTH;
 	}
 
 	/* must be 32bit aligned */
 	if (address & 0x3) {
 		DEBUG_MSG("Error: WRITE address must be 4 byte aligned");
-		return STM32_ERR_UNKNOWN;
+		return STM32_ERR_ADDR_NOT_ALIGNED;
 	}
 
 	if (stm->cmd->wm == STM32_CMD_ERR) {
@@ -595,8 +595,9 @@ stm32_err_t stm32_write_memory(const stm32_t *stm, uint32_t address,
 	}
 
 	/* send the address and checksum */
-	if (stm32_send_command(stm, stm->cmd->wm) != STM32_ERR_OK)
-		return STM32_ERR_UNKNOWN;
+  s_err = stm32_send_command(stm, stm->cmd->wm);
+	if (s_err != STM32_ERR_OK)
+		return s_err;
 
 	buf[0] = address >> 24;
 	buf[1] = (address >> 16) & 0xFF;
@@ -604,9 +605,10 @@ stm32_err_t stm32_write_memory(const stm32_t *stm, uint32_t address,
 	buf[3] = address & 0xFF;
 	buf[4] = buf[0] ^ buf[1] ^ buf[2] ^ buf[3];
 	if (stream->write(buf, 5) != 5)
-		return STM32_ERR_UNKNOWN;
-	if (stm32_get_ack(stm) != STM32_ERR_OK)
-		return STM32_ERR_UNKNOWN;
+		return STM32_ERR_WRITE;
+  s_err = stm32_get_ack(stm);
+	if (s_err != STM32_ERR_OK)
+		return s_err;
 
 	aligned_len = (len + 3) & ~3;
 	cs = aligned_len - 1;
@@ -622,14 +624,14 @@ stm32_err_t stm32_write_memory(const stm32_t *stm, uint32_t address,
 	}
 	buf[aligned_len + 1] = cs;
 	if (stream->write(buf, aligned_len + 2) != aligned_len + 2)
-		return STM32_ERR_UNKNOWN;
+		return STM32_ERR_WRITE;
 
 	s_err = stm32_get_ack_timeout(stm, STM32_BLKWRITE_TIMEOUT);
 	if (s_err != STM32_ERR_OK) {
 		if (stm->flags & STREAM_OPT_STRETCH_W
 		    && stm->cmd->wm != STM32_CMD_WM_NS)
 			stm32_warn_stretching("write");
-		return STM32_ERR_UNKNOWN;
+		return s_err;
 	}
 	return STM32_ERR_OK;
 }

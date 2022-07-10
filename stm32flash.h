@@ -43,9 +43,14 @@
 
 typedef enum {
 	STM32_ERR_OK = 0,
-	STM32_ERR_UNKNOWN,	/* Generic error */
-	STM32_ERR_NACK,
-	STM32_ERR_NO_CMD,	/* Command not available in bootloader */
+	STM32_ERR_UNKNOWN=1,	/* Generic error */
+	STM32_ERR_NACK=2,
+	STM32_ERR_NO_CMD=3,	/* Command not available in bootloader */
+  STM32_ERR_ADDR_NOT_ALIGNED=4,
+  STM32_ERR_WRONG_DATA_LENGTH=5,
+  STM32_ERR_FAILED_TO_SEND_CMD=6,
+  STM32_ERR_WRITE = 7,
+  STM32_ERR_READ = 8
 } stm32_err_t;
 
 typedef enum {
@@ -114,4 +119,3 @@ stm32_err_t stm32_crc_wrapper(const stm32_t *stm, uint32_t address,
 uint32_t stm32_sw_crc(uint32_t crc, uint8_t *buf, unsigned int len);
 
 #endif
-
