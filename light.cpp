@@ -174,6 +174,7 @@ bool STM32FlashBegin()
     logging::getLogStream().println("light: STM32 erase memory");
     stm32_erase_memory(stm32, 0, STM32_MASS_ERASE);
     stm32Addr = stm32->dev->fl_start;
+    return true;
   }
   else
   {
@@ -716,7 +717,13 @@ void handleDoUploadSTM32Firmware()
   {
     logging::getLogStream().printf("wifi: start uploading STM32 firmware\n");
     memset(stm32FirmwareUpdMsg,0x00,sizeof(stm32FirmwareUpdMsg));
-    STM32FlashBegin();
+    if (STM32FlashBegin()==false)
+    {
+      // Fail to init the STM32. Close the connection
+      wifi::getWifiManager().server.get()->send(500, F("text / plain"), F("failed to init the STM32 for uploading the firmware"));
+      WiFiClient theClient=wifi::getWifiManager().server.get()->client();
+      theClient.stop();
+    }
   }
   else if (upload.status == UPLOAD_FILE_WRITE)
   {
