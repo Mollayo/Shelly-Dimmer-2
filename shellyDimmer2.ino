@@ -17,9 +17,6 @@ void setup()
   // Setup serial
   Serial.begin(115200);
 
-  Serial.println("Booting");
-  Serial.flush();
-
   // Mount the LittleFS
   if (!LittleFS.begin())
     logging::getLogStream().println("Failed to mounted file system");
