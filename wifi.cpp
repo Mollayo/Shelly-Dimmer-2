@@ -1,5 +1,4 @@
 #include <ESP8266WiFi.h>
-#include <ESP8266HTTPUpdateServer.h>
 #include <WiFiManager.h>
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -14,8 +13,6 @@
 namespace wifi {
 
 
-// For the firmware update
-ESP8266HTTPUpdateServer httpUpdater;
 // The webserver for wifi and MQTT configuration
 WiFiManager wifiManager(logging::getLogStream());
 WiFiManager &getWifiManager() {
@@ -404,9 +401,11 @@ void factoryReset()
     logging::getLogStream().println("wifi: failed to format LittleFS");
   else
     logging::getLogStream().println("wifi: LittleFS erased");
-  // LittleFS should be unmounted in order to effectivly erae the all the files
+  // LittleFS should be unmounted in order to effectivly erase all the files
   LittleFS.end();
+  delay(1000);
   wifiManager.reboot();
+  delay(10000);
 }
 
 void prepareOTA()
@@ -487,7 +486,9 @@ void setup()
     if ((WiFi.SSID()!=nullptr) && (WiFi.softAPgetStationNum()==0) && (millis() - startAPTime > 60000))
     {
       logging::getLogStream().println("wifi: still in AP mode; reboot now");
+      delay(1000);
       wifiManager.reboot();
+      delay(10000);
     }
   }
 

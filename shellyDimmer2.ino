@@ -1,6 +1,6 @@
 
 /*
-  Firmware for Shelly Dimmer 2: https://shelly.cloud/knowledge-base/devices/shelly-dimmer-2/
+  Firmware for Shelly Dimmer 2: https://kb.shelly.cloud/knowledge-base/shelly-dimmer-2
 */
 
 
@@ -16,6 +16,9 @@ void setup()
 {
   // Setup serial
   Serial.begin(115200);
+
+  Serial.println("Booting");
+  Serial.flush();
 
   // Mount the LittleFS
   if (!LittleFS.begin())
@@ -53,5 +56,4 @@ void loop()
 
   // Process the switches events
   switches::handle();
-
 }

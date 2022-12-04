@@ -12,6 +12,10 @@
 
 namespace light {
 
+// For booting the STM
+bool cmdVersionReceived=false;
+unsigned long STM32ResetTime=0;
+
 // The light parameters
 volatile uint8_t minBrightness = 0;   // brightness values in %
 volatile uint8_t maxBrightness = 50;
@@ -89,8 +93,8 @@ char stm32FirmwareUpdMsg[256]={0x00};
 void STM32reset()
 {
   pinMode(STM_NRST_PIN, OUTPUT);
-
   pinMode(STM_BOOT0_PIN, OUTPUT);
+  
   digitalWrite(STM_BOOT0_PIN, LOW); // boot stm from its own flash memory
 
   digitalWrite(STM_NRST_PIN, LOW); // start stm reset
@@ -246,7 +250,7 @@ void processReceivedPacket(uint8_t payload_cmd, uint8_t* payload, uint8_t payloa
     logging::getLogStream().printf("light: STM Firmware version: %s\n", helpers::hexToStr(payload, payload_size));
     if (payload[0] != 0x3F || payload[1] != 0x02)
       logging::getLogStream().printf("light: STM Firmware is 0x%02X,0x%02X. It should be 0x3F,0x02\n", payload[0], payload[1]);
-
+    cmdVersionReceived=true;
   }
   // Command for getting the state (brigthness level, wattage, etc)
   else if (payload_cmd == CMD_GET_STATE)
@@ -672,7 +676,10 @@ ICACHE_RAM_ATTR bool lightIsOn()
 
 void setup()
 {
-  STM32reset();
+  pinMode(STM_NRST_PIN, OUTPUT);
+  pinMode(STM_BOOT0_PIN, OUTPUT);
+  delay(50);
+  sendCmdGetVersion();
 }
 
 void updateParams()
@@ -720,7 +727,7 @@ void handleDoUploadSTM32Firmware()
     if (STM32FlashBegin()==false)
     {
       // Fail to init the STM32. Close the connection
-      wifi::getWifiManager().server.get()->send(500, F("text / plain"), F("failed to init the STM32 for uploading the firmware"));
+      wifi::getWifiManager().server.get()->send(500, F("text / plain"), F("Failed to init the STM32. RX and TX lines should be disconnected"));
       WiFiClient theClient=wifi::getWifiManager().server.get()->client();
       theClient.stop();
     }
@@ -790,6 +797,12 @@ void handle()
 
   // Process packets from the STM32 MCU
   receivePacket();
+
+  if (cmdVersionReceived==false && millis()-STM32ResetTime>300)
+  {
+    STM32reset();
+    STM32ResetTime=millis();
+  }
 
   // Check if there is new brightness value to publish
   if (publishedBrightness != brightness)
